@@ -37,3 +37,10 @@ UWAGA: To prototyp demonstracyjny. Hasła są przechowywane w przeglądarce, a h
 
 ## Poprawka numeracji
 W panelu admina widoczna jest liczba wszystkich kont (nie tylko wybranej klasy). Przycisk „Usuń WSZYSTKICH uczniów” po podwójnym potwierdzeniu kasuje wszystkie konta i powiązane dane lokalne, dzięki czemu następne generowanie zaczyna się od uczen1. Usunięcie klasy samo w sobie NIE usuwa uczniów. Uwaga: tej operacji nie można cofnąć.
+
+
+## Reset hasła ucznia (wersja demonstracyjna)
+
+Na ekranie logowania ucznia kliknij „Nie pamiętam hasła”, podaj login i wyślij prośbę. Administrator w swoim panelu zobaczy prośbę i wygeneruje losowy kod jednorazowy (8 znaków), ważny przez 30 minut. Musi przekazać go uczniowi poza stroną. Uczeń wybiera „Mam jednorazowy kod”, wpisuje login, kod i nowe hasło do 10 znaków. Po użyciu kod jest usuwany. Wygenerowanie nowego kodu unieważnia poprzedni.
+
+UWAGA: GitHub Pages nie zapewnia serwera. Konta, hasła, prośby i kody są przechowywane w localStorage w tej samej przeglądarce i mogą zostać odczytane lub zmienione przez użytkownika urządzenia. Funkcja służy tylko do demonstracji na jednym urządzeniu; nie nadaje się do prawdziwego resetowania haseł uczniów ani ochrony danych osobowych. Do użycia w szkole niezbędny jest backend z bezpiecznym uwierzytelnianiem, autoryzacją i synchronizacją.

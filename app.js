@@ -2,14 +2,14 @@
 const $=id=>document.getElementById(id);
 const KEY='wordclass_demo_v2';
 let state;try{state=JSON.parse(localStorage.getItem(KEY))||{accounts:[],nextId:1,words:{}}}catch{state={accounts:[],nextId:1,words:{}}}
-state.accounts ||= [];state.words ||= {};state.nextId ||= 1;state.classes ||= [];state.nextClassId ||= 1;state.verbs ||= {};state.grades ||= {};state.averageRequests ||= {};
+state.accounts ||= [];state.words ||= {};state.nextId ||= 1;state.classes ||= [];state.nextClassId ||= 1;state.verbs ||= {};state.grades ||= {};state.averageRequests ||= {};state.passwordResets ||= {};
 let user=null,question=null,loginRole='student';
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
 const show=(id)=>{['home','login','setup','admin','student'].forEach(x=>$(x).classList.toggle('hidden',x!==id));$('message').textContent=''};
 const msg=t=>$('message').textContent=t;
 const rnd=()=>{const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';let a=new Uint32Array(5);crypto.getRandomValues(a);return Array.from(a,n=>chars[n%chars.length]).join('')};
-function login(){let name=$('loginName').value.trim(),pass=$('loginPass').value;if(loginRole==='admin'&&name==='admin'&&pass==='wordclass'){user={admin:true};renderClasses();renderAccounts();show('admin');return}if(loginRole==='admin'){msg('Nieprawidłowe dane administratora.');return}let found=state.accounts.find(a=>a.login===name&&a.password===pass);if(!found){msg('Nieprawidłowy login lub hasło.');return}user=found;if(found.firstLogin){show('setup')}else{openStudent()}}
-function openLogin(role){loginRole=role;$('loginHeading').textContent=role==='admin'?'👩‍🏫 Logowanie administratora':'🎓 Logowanie ucznia';$('loginIcon').textContent=role==='admin'?'👩‍🏫':'🎓';$('loginHelp').textContent=role==='admin'?'Zarządzaj kontami swojej klasy.':'Wpisz login i hasło otrzymane od administratora.';$('demoHint').textContent=role==='admin'?'DEMO: login admin, hasło wordclass':'Konto ucznia tworzy administrator na tym urządzeniu.';$('loginName').value='';$('loginPass').value='';show('login');$('loginName').focus()}$('goAdmin').onclick=()=>openLogin('admin');$('goStudent').onclick=()=>openLogin('student');$('backHome').onclick=()=>show('home');$('signIn').onclick=login;
+function login(){let name=$('loginName').value.trim(),pass=$('loginPass').value;if(loginRole==='admin'&&name==='admin'&&pass==='Dawid12121'){user={admin:true};renderClasses();renderAccounts();renderResetRequests();show('admin');return}if(loginRole==='admin'){msg('Nieprawidłowe dane administratora.');return}let found=state.accounts.find(a=>a.login===name&&a.password===pass);if(!found){msg('Nieprawidłowy login lub hasło.');return}user=found;if(found.firstLogin){show('setup')}else{openStudent()}}
+function openLogin(role){loginRole=role;$('loginHeading').textContent=role==='admin'?'👩‍🏫 Logowanie administratora':'🎓 Logowanie ucznia';$('loginIcon').textContent=role==='admin'?'👩‍🏫':'🎓';$('loginHelp').textContent=role==='admin'?'Zarządzaj kontami swojej klasy.':'Wpisz login i hasło otrzymane od administratora.';$('demoHint').textContent=role==='admin'?'DEMO: login admin, hasło ustawione przez właściciela':'Konto ucznia tworzy administrator na tym urządzeniu.';$('loginName').value='';$('loginPass').value='';$('resetLoginArea').classList.toggle('hidden',role!=='student');$('resetRequestForm').classList.add('hidden');$('resetCodeForm').classList.add('hidden');show('login');$('loginName').focus()}$('goAdmin').onclick=()=>openLogin('admin');$('goStudent').onclick=()=>openLogin('student');$('backHome').onclick=()=>show('home');$('signIn').onclick=login;
 $('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 $('finishSetup').onclick=()=>{let first=$('firstName').value.trim(),last=$('lastName').value.trim(),pass=$('newPassword').value;if(!first||!last||!pass||pass.length>10){msg('Wpisz imię, nazwisko i hasło do 10 znaków.');return}user.first=first;user.last=last;user.password=pass;user.firstLogin=false;save();openStudent()};
 function openStudent(){$('verbInput').value=(state.verbs[user.login]||[]).map(v=>[v.base,v.past,v.participle,v.pl].join(' - ')).join('\n');countVerbs();$('studentTitle').textContent='Cześć, '+(user.first||user.login)+'!';$('wordInput').value=(state.words[user.login]||[]).map(x=>x.en+' - '+x.pl).join('\n');countWords();show('student');tab('notes');renderStudentGrades()}
@@ -25,8 +25,8 @@ function renderClasses(){
 $('addClass').onclick=()=>{const name=$('className').value.trim();if(!name){msg('Wpisz nazwę klasy.');return}if(state.classes.length>=10){msg('Można mieć maksymalnie 10 klas.');return}if(state.classes.some(c=>c.name.toLocaleLowerCase('pl')===name.toLocaleLowerCase('pl'))){msg('Klasa o tej nazwie już istnieje.');return}state.classes.push({id:state.nextClassId++,name});$('className').value='';save();renderClasses();msg('Dodano klasę '+name+'.')};
 $('filterClass').onchange=renderAccounts;
 function visibleAccounts(){const filter=$('filterClass').value;return state.accounts.filter(a=>filter==='all'||(filter==='none'?!a.classId:String(a.classId)===filter))}
-function renderAccounts(){$('totalAccounts').textContent='Łącznie kont uczniów we wszystkich klasach: '+state.accounts.length+'. Wyświetlany filtr może ukrywać konta z innych klas.';$('accounts').replaceChildren();visibleAccounts().forEach(a=>{let tr=document.createElement('tr');[a.login,a.firstLogin?a.password:'(zmienione)',a.firstLogin?'Nieaktywowane':(a.first+' '+a.last),className(a.classId)].forEach(t=>{let td=document.createElement('td');td.textContent=t;tr.append(td)});let gradeTd=document.createElement('td');const gb=document.createElement('button');gb.className='secondary';gb.textContent='📊 Oceny';gb.onclick=()=>openGradeEditor(a.login);gradeTd.append(gb);const small=document.createElement('div');small.className='muted small';small.textContent='Średnia: '+averageText(a.login);gradeTd.append(small);if(state.averageRequests[a.login]?.status==='pending'){const badge=document.createElement('span');badge.className='pending';badge.textContent='📨 Prośba ucznia';gradeTd.append(badge)}tr.append(gradeTd);let td=document.createElement('td'),b=document.createElement('button');b.textContent='Usuń';b.onclick=()=>{if(confirm('Usunąć konto '+a.login+'?')){state.accounts=state.accounts.filter(x=>x!==a);delete state.words[a.login];delete state.verbs[a.login];delete state.grades[a.login];delete state.averageRequests[a.login];if(editingGradeLogin===a.login){editingGradeLogin=null;$('gradeEditor').classList.add('hidden')}save();renderClasses();renderAccounts()}};td.append(b);tr.append(td);$('accounts').append(tr)})}
-$('deleteAllAccounts').onclick=()=>{const n=state.accounts.length;if(!n){msg('Nie ma żadnych kont. Następny login będzie uczen1.');return}if(!confirm('UWAGA: Usunąć WSZYSTKIE '+n+' kont uczniów ze WSZYSTKICH klas? Znikną również ich słówka, czasowniki i oceny zapisane w tej przeglądarce. Tej operacji nie można cofnąć.'))return;const confirmation=prompt('Aby potwierdzić usunięcie wszystkich kont, wpisz dokładnie: USUN');if(confirmation!=='USUN'){msg('Anulowano usuwanie kont.');return}state.accounts=[];state.words={};state.verbs={};state.grades={};state.averageRequests={};state.nextId=1;editingGradeLogin=null;$('gradeEditor').classList.add('hidden');save();renderClasses();$('filterClass').value='all';renderAccounts();msg('Usunięto wszystkie konta. Następny wygenerowany login: uczen1.')};
+function renderAccounts(){renderResetRequests();$('totalAccounts').textContent='Łącznie kont uczniów we wszystkich klasach: '+state.accounts.length+'. Wyświetlany filtr może ukrywać konta z innych klas.';$('accounts').replaceChildren();visibleAccounts().forEach(a=>{let tr=document.createElement('tr');[a.login,a.firstLogin?a.password:'(zmienione)',a.firstLogin?'Nieaktywowane':(a.first+' '+a.last),className(a.classId)].forEach(t=>{let td=document.createElement('td');td.textContent=t;tr.append(td)});let gradeTd=document.createElement('td');const gb=document.createElement('button');gb.className='secondary';gb.textContent='📊 Oceny';gb.onclick=()=>openGradeEditor(a.login);gradeTd.append(gb);const small=document.createElement('div');small.className='muted small';small.textContent='Średnia: '+averageText(a.login);gradeTd.append(small);if(state.averageRequests[a.login]?.status==='pending'){const badge=document.createElement('span');badge.className='pending';badge.textContent='📨 Prośba ucznia';gradeTd.append(badge)}tr.append(gradeTd);let td=document.createElement('td'),b=document.createElement('button');b.textContent='Usuń';b.onclick=()=>{if(confirm('Usunąć konto '+a.login+'?')){state.accounts=state.accounts.filter(x=>x!==a);delete state.words[a.login];delete state.verbs[a.login];delete state.grades[a.login];delete state.averageRequests[a.login];delete state.passwordResets[a.login];if(editingGradeLogin===a.login){editingGradeLogin=null;$('gradeEditor').classList.add('hidden')}save();renderClasses();renderAccounts()}};td.append(b);tr.append(td);$('accounts').append(tr)})}
+$('deleteAllAccounts').onclick=()=>{const n=state.accounts.length;if(!n){msg('Nie ma żadnych kont. Następny login będzie uczen1.');return}if(!confirm('UWAGA: Usunąć WSZYSTKIE '+n+' kont uczniów ze WSZYSTKICH klas? Znikną również ich słówka, czasowniki i oceny zapisane w tej przeglądarce. Tej operacji nie można cofnąć.'))return;const confirmation=prompt('Aby potwierdzić usunięcie wszystkich kont, wpisz dokładnie: USUN');if(confirmation!=='USUN'){msg('Anulowano usuwanie kont.');return}state.accounts=[];state.words={};state.verbs={};state.grades={};state.averageRequests={};state.passwordResets={};state.nextId=1;editingGradeLogin=null;$('gradeEditor').classList.add('hidden');save();renderClasses();$('filterClass').value='all';renderAccounts();msg('Usunięto wszystkie konta. Następny wygenerowany login: uczen1.')};
 $('generate').onclick=()=>{let n=Number($('count').value);if(!Number.isInteger(n)||n<1||n>50){msg('Wpisz liczbę od 1 do 50.');return}const id=$('generateClass').value;const classId=id===''?null:Number(id);if(classId!==null&&!state.classes.some(c=>c.id===classId)){msg('Wybierz istniejącą klasę.');return}for(let i=0;i<n;i++){let number=1;while(state.accounts.some(a=>a.login==='uczen'+number))number++;let login='uczen'+number;state.accounts.push({login,password:rnd(),firstLogin:true,first:'',last:'',classId})}save();renderClasses();$('filterClass').value=classId===null?'none':String(classId);renderAccounts();msg('Wygenerowano '+n+' kont. Wydrukuj dane startowe dla wybranej klasy.')};
 function printMode(mode){document.body.classList.add(mode);window.print();setTimeout(()=>document.body.classList.remove(mode),1000)}
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-accounts','print-test','print-verbs'));
@@ -70,3 +70,46 @@ $('closeGrades').onclick=()=>{$('gradeEditor').classList.add('hidden');editingGr
 function renderStudentGrades(){if(!user||user.admin)return;const list=$('studentGradeList');list.replaceChildren();const grades=gradeEntries(user.login);grades.forEach(g=>list.append(gradeGroup(g)));if(!grades.length)list.textContent='Nie masz jeszcze ocen.';const req=state.averageRequests[user.login];const active=req?.status==='approved'&&req.expiresAt>Date.now();$('studentAverage').textContent=active?'⭐ Twoja średnia: '+averageText(user.login)+' (dostęp do '+new Date(req.expiresAt).toLocaleString('pl-PL')+')':'🔒 Twoja średnia jest ukryta.';$('requestAverage').disabled=active||req?.status==='pending';$('requestStatus').textContent=active?'Dostęp wygasa automatycznie po 24 godzinach.':req?.status==='pending'?'Prośba oczekuje na decyzję nauczyciela.':req?.status==='rejected'?'Ostatnia prośba została odrzucona. Możesz wysłać kolejną.':''}
 $('requestAverage').onclick=()=>{if(!user||user.admin)return;const req=state.averageRequests[user.login];if(req?.status==='pending')return;state.averageRequests[user.login]={status:'pending'};save();renderStudentGrades();msg('Wysłano prośbę do administratora (na tym urządzeniu).')};
 show('home');
+// DEMO ONLY: reset requests and codes are stored locally in this browser.
+// This is not secure authentication and does not sync between devices.
+$('showResetRequest').onclick=()=>{$('resetRequestForm').classList.toggle('hidden');$('resetCodeForm').classList.add('hidden')};
+$('showResetCode').onclick=()=>{$('resetCodeForm').classList.toggle('hidden');$('resetRequestForm').classList.add('hidden')};
+$('sendResetRequest').onclick=()=>{
+ const login=$('resetRequestLogin').value.trim().toLowerCase();
+ if(!state.accounts.some(a=>a.login===login)){msg('Nie znaleziono konta o takim loginie.');return}
+ const old=state.passwordResets[login];
+ if(old?.status==='pending'){msg('Prośba została już wysłana. Poczekaj na administratora.');return}
+ state.passwordResets[login]={status:'pending',requestedAt:Date.now()};save();
+ msg('Prośba zapisana. Poproś administratora o wygenerowanie i przekazanie kodu.');
+};
+function renderResetRequests(){
+ const target=$('resetRequests');target.replaceChildren();
+ const entries=Object.entries(state.passwordResets).filter(([login,r])=>state.accounts.some(a=>a.login===login)&&r.status==='pending');
+ if(!entries.length){target.textContent='Brak nowych próśb o reset hasła.';return}
+ entries.forEach(([login,r])=>{
+  const row=document.createElement('div');row.className='reset-request-row';
+  const name=document.createElement('strong');name.textContent='🎓 '+login+' prosi o reset hasła';
+  const btn=document.createElement('button');btn.textContent='Wygeneruj kod';
+  btn.onclick=()=>{
+   const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const bytes=new Uint32Array(8);crypto.getRandomValues(bytes);
+   const code=Array.from(bytes,x=>chars[x%chars.length]).join('');
+   state.passwordResets[login]={status:'issued',code,expiresAt:Date.now()+30*60*1000};save();
+   renderResetRequests();renderAccounts();
+   alert('Kod jednorazowy dla '+login+': '+code+'\n\nZapisz go i przekaż uczniowi. Kod jest ważny 30 minut i działa tylko raz.');
+  };
+  const cancel=document.createElement('button');cancel.className='secondary';cancel.textContent='Odrzuć';
+  cancel.onclick=()=>{delete state.passwordResets[login];save();renderResetRequests()};
+  row.append(name,btn,cancel);target.append(row);
+ });
+}
+$('redeemResetCode').onclick=()=>{
+ const login=$('resetCodeLogin').value.trim().toLowerCase();
+ const code=$('resetCodeValue').value.trim().toUpperCase();const pass=$('resetNewPassword').value;
+ const account=state.accounts.find(a=>a.login===login);const req=state.passwordResets[login];
+ if(!account||!req||req.status!=='issued'||req.code!==code||Date.now()>req.expiresAt){msg('Nieprawidłowy lub wygasły kod. Poproś administratora o nowy.');return}
+ if(!pass||pass.length>10){msg('Nowe hasło musi mieć od 1 do 10 znaków.');return}
+ account.password=pass;account.firstLogin=!account.first||!account.last;
+ delete state.passwordResets[login];save();
+ $('resetCodeValue').value='';$('resetNewPassword').value='';$('resetCodeForm').classList.add('hidden');
+ msg('Hasło zostało zmienione. Zaloguj się nowym hasłem.');
+};
