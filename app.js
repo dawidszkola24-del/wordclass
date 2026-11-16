@@ -51,7 +51,45 @@ function countWords(){$('wordCount').textContent='Zapisane słówka: '+words().l
 $('saveWords').onclick=()=>{let lines=$('wordInput').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(lines.length>100){msg('Maksymalnie 100 par słówek.');return}let parsed=[];for(let line of lines){let m=line.match(/^(.+?)\s+[-–—]\s+(.+)$/);if(!m){msg('Popraw format: angielskie - polskie (błędna linia: '+line+')');return}parsed.push({en:m[1].trim(),pl:m[2].trim()})}state.words[user.login]=parsed;save();countWords();msg('Słówka zapisane na tym urządzeniu.')};
 function shuffled(a){return [...a].sort(()=>Math.random()-.5)}
 $('nextQuestion').onclick=()=>{let all=words();if(all.length<2){$('question').textContent='Dodaj co najmniej 2 słówka.';$('answers').replaceChildren();return}let dir=$('direction').value,src=dir==='enpl'?'en':'pl',dst=dir==='enpl'?'pl':'en';let target=all[Math.floor(Math.random()*all.length)];let options=shuffled([...new Set([target[dst],...shuffled(all).map(x=>x[dst])])].slice(0,4));$('question').textContent='Przetłumacz: '+target[src];$('answers').replaceChildren();$('feedback').textContent='';options.forEach(value=>{let b=document.createElement('button');b.textContent=value;b.onclick=()=>{$('feedback').textContent=value===target[dst]?'✅ Dobrze!':'❌ Poprawna odpowiedź: '+target[dst]};$('answers').append(b)})};
-$('makeTest').onclick=()=>{let all=shuffled(words());if(!all.length){msg('Najpierw dodaj słówka.');return}let dir=$('testDirection').value,src=dir==='enpl'?'en':'pl';let sheet=$('testSheet');sheet.replaceChildren();let h=document.createElement('h2');h.textContent='WordClass – test słówek';sheet.append(h);let p=document.createElement('p');p.textContent='Imię i nazwisko: _________________________   Data: __________';sheet.append(p);let ol=document.createElement('ol');all.forEach(w=>{let li=document.createElement('li');li.textContent=w[src]+' — __________________________________';ol.append(li)});sheet.append(ol);msg('Test gotowy. Możesz go wydrukować lub zapisać jako PDF.')};
+let onlineTest=[];
+function normalizeAnswer(value){return String(value||'').trim().toLocaleLowerCase('pl-PL').replace(/\s+/g,' ')}
+$('makeTest').onclick=()=>{
+ const all=shuffled(words());if(!all.length){msg('Najpierw dodaj słówka w notesie.');return}
+ const mode=$('testMode').value,dir=$('testDirection').value;
+ const count=$('testCount').value==='all'?all.length:Math.min(all.length,Number($('testCount').value));
+ if(mode==='abcd' && new Set(all.map(w=>normalizeAnswer(w.en))).size<2 && new Set(all.map(w=>normalizeAnswer(w.pl))).size<2){msg('Do testu ABCD dodaj co najmniej 2 różne słówka.');return}
+ onlineTest=all.slice(0,count).map(w=>{
+  const d=dir==='mixed'?(Math.random()<.5?'enpl':'plen'):dir;
+  const src=d==='enpl'?'en':'pl',dst=d==='enpl'?'pl':'en';
+  const alternatives=shuffled([...new Set(all.map(x=>x[dst]).filter(v=>normalizeAnswer(v)!==normalizeAnswer(w[dst])))]).slice(0,3);
+  return {prompt:w[src],answer:w[dst],direction:d,options:shuffled([w[dst],...alternatives])};
+ });
+ const sheet=$('testSheet');sheet.replaceChildren();
+ const h=document.createElement('h3');h.textContent='📝 Test online — '+(mode==='abcd'?'ABCD':'zadania otwarte');sheet.append(h);
+ const intro=document.createElement('p');intro.textContent='Pytania: '+onlineTest.length+'. Wybierz lub wpisz odpowiedzi, potem kliknij „Sprawdź wynik”.';sheet.append(intro);
+ onlineTest.forEach((q,i)=>{
+  const item=document.createElement('fieldset');item.className='online-question';item.dataset.index=String(i);
+  const legend=document.createElement('legend');legend.textContent=(i+1)+'. '+q.prompt+' ('+(q.direction==='enpl'?'EN → PL':'PL → EN')+')';item.append(legend);
+  if(mode==='abcd'){
+   q.options.forEach((answer,j)=>{const label=document.createElement('label');label.className='online-choice';const input=document.createElement('input');input.type='radio';input.name='onlineQ'+i;input.value=answer;const letter=document.createElement('strong');letter.textContent=' '+String.fromCharCode(65+j)+'. ';label.append(input,letter,document.createTextNode(answer));item.append(label)});
+  }else{const input=document.createElement('input');input.type='text';input.className='online-answer';input.autocomplete='off';input.placeholder='Wpisz tłumaczenie';input.setAttribute('aria-label','Odpowiedź na pytanie '+(i+1));item.append(input)}
+  const feedback=document.createElement('p');feedback.className='online-feedback';feedback.setAttribute('aria-live','polite');item.append(feedback);sheet.append(item);
+ });
+ $('testResult').textContent='';$('checkTest').disabled=false;
+ msg('Test online gotowy. Po rozwiązaniu kliknij „Sprawdź wynik”.');
+};
+$('checkTest').onclick=()=>{
+ if(!onlineTest.length)return;
+ let correct=0;const items=[...$('testSheet').querySelectorAll('.online-question')];
+ items.forEach((item,i)=>{
+  const q=onlineTest[i];const selected=item.querySelector('input[type="radio"]:checked');const typed=item.querySelector('input.online-answer');
+  const answer=typed?typed.value:(selected?selected.value:'');const ok=normalizeAnswer(answer)===normalizeAnswer(q.answer);
+  if(ok)correct++;item.classList.toggle('online-correct',ok);item.classList.toggle('online-incorrect',!ok);
+  item.querySelector('.online-feedback').textContent=ok?'✅ Poprawnie':'❌ Poprawna odpowiedź: '+q.answer;
+ });
+ const pct=Math.round(correct/onlineTest.length*100);
+ $('testResult').textContent='🎯 Wynik: '+correct+' / '+onlineTest.length+' ('+pct+'%). Wynik nie jest automatycznie wpisywany do dziennika ocen.';
+};
 $('printTest').onclick=()=>{if(!$('testSheet').children.length){msg('Najpierw utwórz test.');return}printMode('print-test')};
 
 // Three forms of irregular verbs. Stored per student in this browser.
@@ -74,13 +112,13 @@ function gradeNumber(v){const m=/^([1-6])([+-]?)$/.exec(v);if(!m)return NaN;retu
 function gradeEntries(login){return state.grades[login]||[]}
 function averageText(login){const g=gradeEntries(login);if(!g.length)return 'brak ocen';return (g.reduce((sum,x)=>sum+gradeNumber(x.value),0)/g.length).toLocaleString('pl-PL',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function gradePill(g){const span=document.createElement('span');span.className='grade-pill grade-'+g.type;span.textContent=g.value;span.title=(gradeTypes[g.type]||g.type)+' • '+(g.date||'');return span}
-function gradeGroup(g,withDelete=false,index=0){const row=document.createElement('div');row.className='grade-row';row.append(gradePill(g));const desc=document.createElement('span');desc.textContent=(gradeTypes[g.type]||g.type)+' • '+(g.date||'');row.append(desc);if(withDelete){const del=document.createElement('button');del.className='danger small-btn';del.textContent='Usuń ocenę';del.onclick=()=>{if(!confirm('Usunąć ocenę '+g.value+'?'))return;state.grades[editingGradeLogin].splice(index,1);save();renderGradeEditor();renderAccounts()};row.append(del)}return row}
-function openGradeEditor(login){editingGradeLogin=login;$('gradeEditor').classList.remove('hidden');renderGradeEditor();$('gradeEditor').scrollIntoView({behavior:'smooth',block:'nearest'})}
-function renderGradeEditor(){if(!editingGradeLogin)return;const a=state.accounts.find(x=>x.login===editingGradeLogin);if(!a){$('gradeEditor').classList.add('hidden');return}$('gradeStudentHeading').textContent='📊 Oceny: '+(a.first?a.first+' '+a.last+' ('+a.login+')':a.login);$('gradeAverageAdmin').textContent='Średnia ucznia: '+averageText(a.login)+' (oceny mają jednakową wagę)';const list=$('gradeListAdmin');list.replaceChildren();gradeEntries(a.login).forEach((g,i)=>list.append(gradeGroup(g,true,i)));if(!list.children.length)list.textContent='Brak ocen.';const req=state.averageRequests[a.login];const container=$('gradeRequestAdmin');container.replaceChildren();if(req?.status==='pending'){const p=document.createElement('p');p.textContent='📨 Uczeń prosi o dostęp do średniej na 24 godziny.';container.append(p);const ok=document.createElement('button');ok.textContent='Zatwierdź na 24 h';ok.onclick=()=>{state.averageRequests[a.login]={status:'approved',expiresAt:Date.now()+24*60*60*1000};save();renderGradeEditor();renderAccounts()};const no=document.createElement('button');no.className='secondary';no.textContent='Odrzuć';no.onclick=()=>{state.averageRequests[a.login]={status:'rejected'};save();renderGradeEditor();renderAccounts()};container.append(ok,no)}else if(req?.status==='approved'&&req.expiresAt>Date.now()){const p=document.createElement('p');p.textContent='✅ Dostęp do średniej aktywny do: '+new Date(req.expiresAt).toLocaleString('pl-PL');container.append(p)}}
-$('addGrade').onclick=()=>{if(!editingGradeLogin)return;const grade={value:$('gradeValue').value,type:$('gradeType').value,date:new Date().toLocaleDateString('pl-PL')};if(!Number.isFinite(gradeNumber(grade.value)))return;(state.grades[editingGradeLogin] ||= []).push(grade);save();renderGradeEditor();renderAccounts();msg('Dodano ocenę '+grade.value+'.')};
+function gradeGroup(g,withDelete=false,index=0){const row=document.createElement('div');row.className='grade-row';row.append(gradePill(g));const desc=document.createElement('span');desc.textContent=(gradeTypes[g.type]||g.type)+' • '+(g.date||'');row.append(desc);if(withDelete){const del=document.createElement('button');del.className='danger small-btn';del.textContent='Usuń ocenę';del.onclick=()=>{if(!confirm('Usunąć ocenę '+g.value+'?'))return;state.grades[editingGradeLogin].splice(index,1);save();renderGradeEditor();renderAccounts();renderAverageRequests()};row.append(del)}return row}
+function openGradeEditor(login){openAdminSection('adminGrades');editingGradeLogin=login;$('gradeEditor').classList.remove('hidden');renderGradeEditor();$('gradeEditor').scrollIntoView({behavior:'smooth',block:'nearest'})}
+function renderGradeEditor(){if(!editingGradeLogin)return;const a=state.accounts.find(x=>x.login===editingGradeLogin);if(!a){$('gradeEditor').classList.add('hidden');return}$('gradeStudentHeading').textContent='📊 Oceny: '+(a.first?a.first+' '+a.last+' ('+a.login+')':a.login);$('gradeAverageAdmin').textContent='Średnia ucznia: '+averageText(a.login)+' (oceny mają jednakową wagę)';const list=$('gradeListAdmin');list.replaceChildren();gradeEntries(a.login).forEach((g,i)=>list.append(gradeGroup(g,true,i)));if(!list.children.length)list.textContent='Brak ocen.';const req=state.averageRequests[a.login];const container=$('gradeRequestAdmin');container.replaceChildren();if(req?.status==='pending'){const p=document.createElement('p');p.textContent='📨 Uczeń prosi o dostęp do średniej na 24 godziny.';container.append(p);const ok=document.createElement('button');ok.textContent='Zatwierdź na 24 h';ok.onclick=()=>{state.averageRequests[a.login]={status:'approved',expiresAt:Date.now()+24*60*60*1000};save();renderGradeEditor();renderAccounts();renderAverageRequests()};const no=document.createElement('button');no.className='secondary';no.textContent='Odrzuć';no.onclick=()=>{state.averageRequests[a.login]={status:'rejected'};save();renderGradeEditor();renderAccounts();renderAverageRequests()};container.append(ok,no)}else if(req?.status==='approved'&&req.expiresAt>Date.now()){const p=document.createElement('p');p.textContent='✅ Dostęp do średniej aktywny do: '+new Date(req.expiresAt).toLocaleString('pl-PL');container.append(p)}}
+$('addGrade').onclick=()=>{if(!editingGradeLogin)return;const grade={value:$('gradeValue').value,type:$('gradeType').value,date:new Date().toLocaleDateString('pl-PL')};if(!Number.isFinite(gradeNumber(grade.value)))return;(state.grades[editingGradeLogin] ||= []).push(grade);save();renderGradeEditor();renderAccounts();renderAverageRequests();msg('Dodano ocenę '+grade.value+'.')};
 $('closeGrades').onclick=()=>{$('gradeEditor').classList.add('hidden');editingGradeLogin=null};
 function renderStudentGrades(){if(!user||user.admin)return;const list=$('studentGradeList');list.replaceChildren();const grades=gradeEntries(user.login);grades.forEach(g=>list.append(gradeGroup(g)));if(!grades.length)list.textContent='Nie masz jeszcze ocen.';const req=state.averageRequests[user.login];const active=req?.status==='approved'&&req.expiresAt>Date.now();$('studentAverage').textContent=active?'⭐ Twoja średnia: '+averageText(user.login)+' (dostęp do '+new Date(req.expiresAt).toLocaleString('pl-PL')+')':'🔒 Twoja średnia jest ukryta.';$('requestAverage').disabled=active||req?.status==='pending';$('requestStatus').textContent=active?'Dostęp wygasa automatycznie po 24 godzinach.':req?.status==='pending'?'Prośba oczekuje na decyzję nauczyciela.':req?.status==='rejected'?'Ostatnia prośba została odrzucona. Możesz wysłać kolejną.':''}
-$('requestAverage').onclick=()=>{if(!user||user.admin)return;const req=state.averageRequests[user.login];if(req?.status==='pending')return;state.averageRequests[user.login]={status:'pending'};save();renderStudentGrades();msg('Wysłano prośbę do administratora (na tym urządzeniu).')};
+$('requestAverage').onclick=()=>{if(!user||user.admin)return;const req=state.averageRequests[user.login];if(req?.status==='pending')return;state.averageRequests[user.login]={status:'pending',requestedAt:Date.now()};save();renderStudentGrades();msg('Wysłano prośbę do administratora (na tym urządzeniu).')};
 show('home');
 // DEMO ONLY: reset requests and codes are stored locally in this browser.
 // This is not secure authentication and does not sync between devices.
@@ -148,7 +186,7 @@ $('redeemResetCode').onclick=()=>{
     admin.append(panel);
     const tile=document.createElement('button');tile.type='button';tile.className='dashboard-tile';
     tile.innerHTML='<span class="tile-icon">'+b.icon+'</span><strong>'+b.title+'</strong><small>'+b.desc+'</small><span class="tile-arrow">Otwórz →</span>';
-    tile.onclick=()=>{dashboard.classList.add('hidden');back.classList.remove('hidden');blocks.forEach(x=>$(x.id)?.classList.add('hidden'));panel.classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'})};
+    tile.onclick=()=>openAdminSection(b.id);
     dashboard.append(tile);
   });
   const student=$('student');const studentTop=student.querySelector('.top');const tiles=student.querySelector('nav');tiles.id='studentTiles';tiles.classList.add('dashboard-tiles');
@@ -176,3 +214,45 @@ function showStudentDashboard(){
    accountsPanel.append(heading,table);
  }
 })();
+
+// Stała lista próśb i ocen w panelu nauczyciela.
+(function setupGradeDashboard(){
+ const panel=$('adminGrades');
+ if(!panel)return;
+ const pending=document.createElement('div');pending.id='averageRequestInbox';pending.className='grade-editor';
+ const heading=document.createElement('h3');heading.textContent='📨 Prośby uczniów o pokazanie średniej';
+ const list=document.createElement('div');list.id='averageRequestList';pending.append(heading,list);
+ panel.insertBefore(pending,panel.firstChild);
+ const heading2=document.createElement('h3');heading2.textContent='👥 Wybierz ucznia, aby zobaczyć oceny i średnią';
+ const studentList=document.createElement('div');studentList.id='gradeStudentPicker';
+ panel.insertBefore(studentList,$('gradeEditor'));panel.insertBefore(heading2,studentList);
+})();
+function openAdminSection(id){
+ $('adminTiles').classList.add('hidden');$('adminBack').classList.remove('hidden');
+ ['adminClasses','adminAccounts','adminResets','adminGrades'].forEach(x=>$(x)?.classList.toggle('hidden',x!==id));
+ if(id==='adminGrades')renderAverageRequests();
+ window.scrollTo({top:0,behavior:'smooth'});
+}
+function renderAverageRequests(){
+ const inbox=$('averageRequestList'),picker=$('gradeStudentPicker');
+ if(!inbox||!picker)return;
+ inbox.replaceChildren();picker.replaceChildren();
+ const pending=state.accounts.filter(a=>state.averageRequests[a.login]?.status==='pending');
+ if(!pending.length){const p=document.createElement('p');p.className='muted';p.textContent='Brak nowych próśb.';inbox.append(p)}
+ pending.forEach(a=>{
+  const row=document.createElement('div');row.className='grade-row';
+  const label=document.createElement('strong');label.textContent='📨 '+(a.first?[a.first,a.last].filter(Boolean).join(' '):a.login)+' ('+a.login+')';row.append(label);
+  const yes=document.createElement('button');yes.textContent='✅ Akceptuj na 24 h';
+  yes.onclick=()=>{state.averageRequests[a.login]={status:'approved',expiresAt:Date.now()+86400000};save();renderAverageRequests();renderAccounts();if(editingGradeLogin===a.login)renderGradeEditor()};
+  const no=document.createElement('button');no.className='secondary';no.textContent='Odrzuć';
+  no.onclick=()=>{state.averageRequests[a.login]={status:'rejected'};save();renderAverageRequests();renderAccounts();if(editingGradeLogin===a.login)renderGradeEditor()};
+  row.append(yes,no);inbox.append(row)
+ });
+ state.accounts.forEach(a=>{
+  const row=document.createElement('div');row.className='grade-row';
+  const label=document.createElement('span');label.textContent=(a.first?[a.first,a.last].filter(Boolean).join(' '):a.login)+' ('+a.login+') — '+className(a.classId)+' — Średnia: '+averageText(a.login);
+  const btn=document.createElement('button');btn.className='secondary';btn.textContent='📊 Pokaż oceny';btn.onclick=()=>openGradeEditor(a.login);
+  row.append(label,btn);picker.append(row)
+ });
+ if(!state.accounts.length)picker.textContent='Nie ma jeszcze uczniów.';
+}

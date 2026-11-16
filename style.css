@@ -31,3 +31,6 @@
  body.print-accounts #accountPrintSheet th,body.print-accounts #accountPrintSheet td{border:1px solid #999;padding:9px;text-align:left;color:#111}
  body.print-accounts #accountPrintSheet tr{break-inside:avoid}
 }
+
+/* Interaktywny test online */
+.online-question{border:2px solid #e7dafa;border-radius:15px;padding:14px 17px;margin:14px 0;background:#fcfaff}.online-question legend{font-weight:800;padding:0 7px}.online-choice{display:flex;align-items:center;gap:9px;font-weight:500;margin:8px 0;padding:9px;background:white;border-radius:9px;cursor:pointer}.online-choice input{width:auto;margin:0;accent-color:#7752df}.online-answer{max-width:480px}.online-feedback{font-weight:800;margin:8px 0 0}.online-correct{border-color:#5cbd88;background:#f0fff5}.online-incorrect{border-color:#ef9b9b;background:#fff6f6}#testResult{font-size:1.1rem;font-weight:900;color:#5235a4;margin:16px 0}@media print{body.print-test #testSheet .online-choice input{display:none!important}body.print-test #testSheet .online-feedback{display:none!important}body.print-test #testResult{display:none!important}body.print-test #testSheet .online-question{break-inside:avoid;background:white;border:1px solid #bbb}body.print-test #testSheet .online-question legend{color:#111}}

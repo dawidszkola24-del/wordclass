@@ -51,3 +51,10 @@ Po zalogowaniu administrator i uczeń widzą duże kolorowe kafelki. Po wejściu
 
 
 Poprawka: tabela wygenerowanych kont jest widoczna w kafelku Konta uczniów; wydruk zawiera wyłącznie loginy, hasła startowe i klasy, bez dziennika ocen. Drukuj > Zapisz jako PDF.
+
+
+## Testy online (nowe)
+W kafelku „Testy i PDF” uczeń wybiera ABCD lub zadania otwarte, mieszany kierunek EN↔PL i liczbę pytań. Test losuje słówka z notesu, sprawdza wynik i pokazuje prawidłowe odpowiedzi. Wynik nie jest automatycznie oceną w dzienniku. Drukowanie / PDF nadal dostępne. Wszystko działa lokalnie w przeglądarce (wersja demonstracyjna).
+
+## Poprawka dziennika ocen
+W kafelku Oceny uczniów widoczna jest lista uczniów i skrzynka próśb. Nauczyciel może zaakceptować średnią na 24 godziny albo odrzucić prośbę. Uczeń zawsze widzi swoje oceny, ale średnią tylko po akceptacji. Dane lokalne w jednej przeglądarce.
