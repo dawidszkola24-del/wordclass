@@ -33,3 +33,7 @@ UWAGA: To prototyp demonstracyjny. Hasła są przechowywane w przeglądarce, a h
 - Średnia to średnia arytmetyczna, każda ocena ma tę samą wagę. Dla obliczeń minus = -0,25, plus = +0,25 (wartości ograniczone do zakresu 1–6). To umowny sposób liczenia, można go zmienić zgodnie z zasadami szkoły.
 - Uczeń widzi oceny, ale nie widzi średniej. Może wysłać prośbę; administrator zatwierdza ją na 24 godziny lub odrzuca. Dostęp wygasa według czasu urządzenia.
 - **WAŻNE:** Całość jest DEMO działającym wyłącznie w localStorage jednej przeglądarki. Prośby, oceny, konta i hasła nie synchronizują się między urządzeniami. Kod nie zapewnia bezpiecznego logowania ani ochrony danych osobowych. Nie używaj do rzeczywistych ocen uczniów ani do przechowywania ich danych bez wdrożenia backendu, uwierzytelniania i kontroli uprawnień.
+
+
+## Poprawka numeracji
+W panelu admina widoczna jest liczba wszystkich kont (nie tylko wybranej klasy). Przycisk „Usuń WSZYSTKICH uczniów” po podwójnym potwierdzeniu kasuje wszystkie konta i powiązane dane lokalne, dzięki czemu następne generowanie zaczyna się od uczen1. Usunięcie klasy samo w sobie NIE usuwa uczniów. Uwaga: tej operacji nie można cofnąć.
