@@ -3,13 +3,13 @@ const $=id=>document.getElementById(id);
 const KEY='wordclass_demo_v2';
 let state;try{state=JSON.parse(localStorage.getItem(KEY))||{accounts:[],nextId:1,words:{}}}catch{state={accounts:[],nextId:1,words:{}}}
 state.accounts ||= [];state.words ||= {};state.nextId ||= 1;
-let user=null,question=null;
+let user=null,question=null,loginRole='student';
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
-const show=(id)=>{['login','setup','admin','student'].forEach(x=>$(x).classList.toggle('hidden',x!==id));$('message').textContent=''};
+const show=(id)=>{['home','login','setup','admin','student'].forEach(x=>$(x).classList.toggle('hidden',x!==id));$('message').textContent=''};
 const msg=t=>$('message').textContent=t;
 const rnd=()=>{const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';let a=new Uint32Array(5);crypto.getRandomValues(a);return Array.from(a,n=>chars[n%chars.length]).join('')};
-function login(){let name=$('loginName').value.trim(),pass=$('loginPass').value;if(name==='admin'&&pass==='wordclass'){user={admin:true};renderAccounts();show('admin');return}let found=state.accounts.find(a=>a.login===name&&a.password===pass);if(!found){msg('Nieprawidłowy login lub hasło.');return}user=found;if(found.firstLogin){show('setup')}else{openStudent()}}
-$('signIn').onclick=login;
+function login(){let name=$('loginName').value.trim(),pass=$('loginPass').value;if(loginRole==='admin'&&name==='admin'&&pass==='wordclass'){user={admin:true};renderAccounts();show('admin');return}if(loginRole==='admin'){msg('Nieprawidłowe dane administratora.');return}let found=state.accounts.find(a=>a.login===name&&a.password===pass);if(!found){msg('Nieprawidłowy login lub hasło.');return}user=found;if(found.firstLogin){show('setup')}else{openStudent()}}
+function openLogin(role){loginRole=role;$('loginHeading').textContent=role==='admin'?'👩‍🏫 Logowanie administratora':'🎓 Logowanie ucznia';$('loginIcon').textContent=role==='admin'?'👩‍🏫':'🎓';$('loginHelp').textContent=role==='admin'?'Zarządzaj kontami swojej klasy.':'Wpisz login i hasło otrzymane od administratora.';$('demoHint').textContent=role==='admin'?'DEMO: login admin, hasło wordclass':'Konto ucznia tworzy administrator na tym urządzeniu.';$('loginName').value='';$('loginPass').value='';show('login');$('loginName').focus()}$('goAdmin').onclick=()=>openLogin('admin');$('goStudent').onclick=()=>openLogin('student');$('backHome').onclick=()=>show('home');$('signIn').onclick=login;
 $('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 $('finishSetup').onclick=()=>{let first=$('firstName').value.trim(),last=$('lastName').value.trim(),pass=$('newPassword').value;if(!first||!last||!pass||pass.length>10){msg('Wpisz imię, nazwisko i hasło do 10 znaków.');return}user.first=first;user.last=last;user.password=pass;user.firstLogin=false;save();openStudent()};
 function openStudent(){$('studentTitle').textContent='Cześć, '+(user.first||user.login)+'!';$('wordInput').value=(state.words[user.login]||[]).map(x=>x.en+' - '+x.pl).join('\n');countWords();show('student');tab('notes')}
@@ -18,7 +18,7 @@ $('generate').onclick=()=>{let n=Number($('count').value);if(!Number.isInteger(n
 function printMode(mode){document.body.classList.add(mode);window.print();setTimeout(()=>document.body.classList.remove(mode),1000)}
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-accounts','print-test'));
 $('printAccounts').onclick=()=>printMode('print-accounts');
-document.querySelectorAll('.logout').forEach(b=>b.onclick=()=>{user=null;$('loginPass').value='';show('login')});
+document.querySelectorAll('.logout').forEach(b=>b.onclick=()=>{user=null;$('loginPass').value='';show('home')});
 function tab(id){['notes','practice','test'].forEach(x=>$(x).classList.toggle('hidden',x!==id))}
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
 const words=()=>state.words[user.login]||[];
@@ -28,4 +28,4 @@ function shuffled(a){return [...a].sort(()=>Math.random()-.5)}
 $('nextQuestion').onclick=()=>{let all=words();if(all.length<2){$('question').textContent='Dodaj co najmniej 2 słówka.';$('answers').replaceChildren();return}let dir=$('direction').value,src=dir==='enpl'?'en':'pl',dst=dir==='enpl'?'pl':'en';let target=all[Math.floor(Math.random()*all.length)];let options=shuffled([...new Set([target[dst],...shuffled(all).map(x=>x[dst])])].slice(0,4));$('question').textContent='Przetłumacz: '+target[src];$('answers').replaceChildren();$('feedback').textContent='';options.forEach(value=>{let b=document.createElement('button');b.textContent=value;b.onclick=()=>{$('feedback').textContent=value===target[dst]?'✅ Dobrze!':'❌ Poprawna odpowiedź: '+target[dst]};$('answers').append(b)})};
 $('makeTest').onclick=()=>{let all=shuffled(words());if(!all.length){msg('Najpierw dodaj słówka.');return}let dir=$('testDirection').value,src=dir==='enpl'?'en':'pl';let sheet=$('testSheet');sheet.replaceChildren();let h=document.createElement('h2');h.textContent='WordClass – test słówek';sheet.append(h);let p=document.createElement('p');p.textContent='Imię i nazwisko: _________________________   Data: __________';sheet.append(p);let ol=document.createElement('ol');all.forEach(w=>{let li=document.createElement('li');li.textContent=w[src]+' — __________________________________';ol.append(li)});sheet.append(ol);msg('Test gotowy. Możesz go wydrukować lub zapisać jako PDF.')};
 $('printTest').onclick=()=>{if(!$('testSheet').children.length){msg('Najpierw utwórz test.');return}printMode('print-test')};
-show('login');
+show('home');

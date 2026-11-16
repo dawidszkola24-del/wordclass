@@ -1,12 +1,17 @@
-# WordClass – demonstracja
+# WordClass — kolorowa wersja demonstracyjna
 
-Otwórz `index.html` lub wgraj pliki do głównego katalogu repozytorium GitHub Pages.
+## Uruchomienie
+Otwórz `index.html` lub wgraj cztery pliki (`index.html`, `app.js`, `style.css`, `README.md`) do głównego katalogu repozytorium GitHub Pages.
 
-**Logowanie administratora:** `admin` / `wordclass`.
+## Logowanie
+Na stronie głównej są dwa osobne przyciski: Administrator i Uczeń.
 
-To jest **wersja demonstracyjna**: konta i słówka zapisują się wyłącznie w `localStorage` jednej przeglądarki. Konta wygenerowane przez administratora NIE będą dostępne na innych urządzeniach. Hasła nie są bezpiecznie przechowywane. Nie używaj tej wersji do obsługi prawdziwych danych uczniów ani jako publicznego systemu kont.
+- Administrator DEMO: `admin` / `wordclass`.
+- Konta uczniów tworzy administrator; każde ma losowe 5-znakowe hasło startowe.
+- Przy pierwszym logowaniu uczeń podaje imię, nazwisko i własne hasło (do 10 znaków).
+- Uczniowie mają notes (maks. 100 par), ćwiczenia EN↔PL i test do wydruku/PDF.
 
-Do działającej wersji szkolnej, z kontami współdzielonymi między urządzeniami, bezpiecznym logowaniem i rolami, potrzebny jest serwer/baza danych (np. Supabase lub Firebase) oraz odpowiednie zabezpieczenia.
+**Uwaga:** To tylko demonstracja. Dane są zapisywane w `localStorage` w przeglądarce i **nie synchronizują się** między urządzeniami. Hasło administratora znajduje się w publicznym kodzie. Nie używaj prawdziwych danych uczniów. Aby uruchomić prawdziwą klasę z kontami na różnych urządzeniach, potrzebne są backend, baza danych i bezpieczne uwierzytelnianie.
 
-## Drukowanie do PDF
-Kliknij „Drukuj / zapisz jako PDF”, a w oknie drukowania wybierz „Zapisz jako PDF”.
+## Zapisywanie PDF
+Użyj przycisku drukowania, a w oknie drukowania wybierz „Zapisz jako PDF”.
