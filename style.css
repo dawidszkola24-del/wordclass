@@ -9,3 +9,14 @@
 @media print{body.print-accounts #gradeEditor,body.print-accounts #admin>p,body.print-accounts #admin>h3{display:none!important}body.print-accounts #admin table th:nth-child(5),body.print-accounts #admin table td:nth-child(5),body.print-accounts #admin table th:nth-child(6),body.print-accounts #admin table td:nth-child(6){display:none!important}}
 
 .reset-box,.reset-admin{background:#f4eeff;border:1px solid #d8c7ff;border-radius:16px;padding:16px;margin:18px 0}.reset-box button{font-size:.9rem}.reset-request-row{display:flex;flex-wrap:wrap;gap:9px;align-items:center;border-radius:12px;background:white;padding:12px;margin:10px 0}.reset-request-row strong{margin-right:auto}@media print{.reset-box,.reset-admin{display:none!important}}
+
+/* Kolorowe kafelki i nawigacja powrotu */
+.dashboard-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:17px;margin:25px 0!important}
+.dashboard-tile{display:flex;flex-direction:column;align-items:flex-start;gap:9px;text-align:left;margin:0;min-height:185px;padding:23px;border:2px solid #e8defd;border-radius:22px;background:linear-gradient(140deg,#fff,#f4edff);color:#34215e;box-shadow:0 9px 24px #4d2e8b17;transition:transform .2s,box-shadow .2s}
+.dashboard-tile:nth-child(4n+2){background:linear-gradient(140deg,#fff,#fff0f6);border-color:#ffdfec}
+.dashboard-tile:nth-child(4n+3){background:linear-gradient(140deg,#fff,#e9f7ff);border-color:#d5eefe}
+.dashboard-tile:nth-child(4n+4){background:linear-gradient(140deg,#fff,#fff3e4);border-color:#ffe3bd}
+.dashboard-tile:hover{transform:translateY(-4px);box-shadow:0 14px 30px #4d2e8b28}
+.dashboard-tile .tile-icon{font-size:2.5rem}.dashboard-tile strong{font-size:1.2rem}.dashboard-tile small{font-size:.86rem;color:#6c6082}.dashboard-tile .tile-arrow{margin-top:auto;font-size:.88rem;font-weight:900;color:#7551c7}
+.dashboard-back{margin:22px 0 12px!important}.dashboard-section{padding-top:8px}
+@media print{.dashboard-tiles,.dashboard-back{display:none!important}body.print-accounts #adminAccounts{display:block!important}body.print-test #test,body.print-verbs #verbs{display:block!important}}

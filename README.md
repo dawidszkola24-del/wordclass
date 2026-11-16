@@ -44,3 +44,7 @@ W panelu admina widoczna jest liczba wszystkich kont (nie tylko wybranej klasy).
 Na ekranie logowania ucznia kliknij „Nie pamiętam hasła”, podaj login i wyślij prośbę. Administrator w swoim panelu zobaczy prośbę i wygeneruje losowy kod jednorazowy (8 znaków), ważny przez 30 minut. Musi przekazać go uczniowi poza stroną. Uczeń wybiera „Mam jednorazowy kod”, wpisuje login, kod i nowe hasło do 10 znaków. Po użyciu kod jest usuwany. Wygenerowanie nowego kodu unieważnia poprzedni.
 
 UWAGA: GitHub Pages nie zapewnia serwera. Konta, hasła, prośby i kody są przechowywane w localStorage w tej samej przeglądarce i mogą zostać odczytane lub zmienione przez użytkownika urządzenia. Funkcja służy tylko do demonstracji na jednym urządzeniu; nie nadaje się do prawdziwego resetowania haseł uczniów ani ochrony danych osobowych. Do użycia w szkole niezbędny jest backend z bezpiecznym uwierzytelnianiem, autoryzacją i synchronizacją.
+
+
+## Nowość: kafelki i powrót
+Po zalogowaniu administrator i uczeń widzą duże kolorowe kafelki. Po wejściu w funkcję przycisk „← Wróć do kafelków” przywraca menu bez wylogowania.

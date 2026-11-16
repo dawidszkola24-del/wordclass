@@ -8,11 +8,11 @@ const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
 const show=(id)=>{['home','login','setup','admin','student'].forEach(x=>$(x).classList.toggle('hidden',x!==id));$('message').textContent=''};
 const msg=t=>$('message').textContent=t;
 const rnd=()=>{const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';let a=new Uint32Array(5);crypto.getRandomValues(a);return Array.from(a,n=>chars[n%chars.length]).join('')};
-function login(){let name=$('loginName').value.trim(),pass=$('loginPass').value;if(loginRole==='admin'&&name==='admin'&&pass==='Dawid12121'){user={admin:true};renderClasses();renderAccounts();renderResetRequests();show('admin');return}if(loginRole==='admin'){msg('Nieprawidłowe dane administratora.');return}let found=state.accounts.find(a=>a.login===name&&a.password===pass);if(!found){msg('Nieprawidłowy login lub hasło.');return}user=found;if(found.firstLogin){show('setup')}else{openStudent()}}
+function login(){let name=$('loginName').value.trim(),pass=$('loginPass').value;if(loginRole==='admin'&&name==='admin'&&pass==='Dawid12121'){user={admin:true};renderClasses();renderAccounts();renderResetRequests();show('admin');showAdminDashboard();return}if(loginRole==='admin'){msg('Nieprawidłowe dane administratora.');return}let found=state.accounts.find(a=>a.login===name&&a.password===pass);if(!found){msg('Nieprawidłowy login lub hasło.');return}user=found;if(found.firstLogin){show('setup')}else{openStudent()}}
 function openLogin(role){loginRole=role;$('loginHeading').textContent=role==='admin'?'👩‍🏫 Logowanie administratora':'🎓 Logowanie ucznia';$('loginIcon').textContent=role==='admin'?'👩‍🏫':'🎓';$('loginHelp').textContent=role==='admin'?'Zarządzaj kontami swojej klasy.':'Wpisz login i hasło otrzymane od administratora.';$('demoHint').textContent=role==='admin'?'DEMO: login admin, hasło ustawione przez właściciela':'Konto ucznia tworzy administrator na tym urządzeniu.';$('loginName').value='';$('loginPass').value='';$('resetLoginArea').classList.toggle('hidden',role!=='student');$('resetRequestForm').classList.add('hidden');$('resetCodeForm').classList.add('hidden');show('login');$('loginName').focus()}$('goAdmin').onclick=()=>openLogin('admin');$('goStudent').onclick=()=>openLogin('student');$('backHome').onclick=()=>show('home');$('signIn').onclick=login;
 $('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 $('finishSetup').onclick=()=>{let first=$('firstName').value.trim(),last=$('lastName').value.trim(),pass=$('newPassword').value;if(!first||!last||!pass||pass.length>10){msg('Wpisz imię, nazwisko i hasło do 10 znaków.');return}user.first=first;user.last=last;user.password=pass;user.firstLogin=false;save();openStudent()};
-function openStudent(){$('verbInput').value=(state.verbs[user.login]||[]).map(v=>[v.base,v.past,v.participle,v.pl].join(' - ')).join('\n');countVerbs();$('studentTitle').textContent='Cześć, '+(user.first||user.login)+'!';$('wordInput').value=(state.words[user.login]||[]).map(x=>x.en+' - '+x.pl).join('\n');countWords();show('student');tab('notes');renderStudentGrades()}
+function openStudent(){$('verbInput').value=(state.verbs[user.login]||[]).map(v=>[v.base,v.past,v.participle,v.pl].join(' - ')).join('\n');countVerbs();$('studentTitle').textContent='Cześć, '+(user.first||user.login)+'!';$('wordInput').value=(state.words[user.login]||[]).map(x=>x.en+' - '+x.pl).join('\n');countWords();show('student');showStudentDashboard();renderStudentGrades()}
 function className(id){return state.classes.find(c=>c.id===id)?.name||'Bez klasy'}
 function renderClasses(){
  $('classLimit').textContent=state.classes.length+' / 10';$('classList').replaceChildren();
@@ -32,7 +32,7 @@ function printMode(mode){document.body.classList.add(mode);window.print();setTim
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-accounts','print-test','print-verbs'));
 $('printAccounts').onclick=()=>{if(!visibleAccounts().length){msg('Brak uczniów do wydrukowania w wybranej klasie.');return}printMode('print-accounts')};
 document.querySelectorAll('.logout').forEach(b=>b.onclick=()=>{user=null;$('loginPass').value='';show('home')});
-function tab(id){if(id==='grades')renderStudentGrades();['notes','practice','test','verbs','grades'].forEach(x=>$(x).classList.toggle('hidden',x!==id))}
+function tab(id){$('studentTiles').classList.add('hidden');$('studentBack').classList.remove('hidden');if(id==='grades')renderStudentGrades();['notes','practice','test','verbs','grades'].forEach(x=>$(x).classList.toggle('hidden',x!==id))}
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
 const words=()=>state.words[user.login]||[];
 function countWords(){$('wordCount').textContent='Zapisane słówka: '+words().length+' / 100'}
@@ -113,3 +113,44 @@ $('redeemResetCode').onclick=()=>{
  $('resetCodeValue').value='';$('resetNewPassword').value='';$('resetCodeForm').classList.add('hidden');
  msg('Hasło zostało zmienione. Zaloguj się nowym hasłem.');
 };
+
+
+// Kafelkowe menu administratora i ucznia, z przyciskiem powrotu.
+(function buildDashboards(){
+  const admin=$('admin');
+  const top=admin.querySelector('.top');
+  const blocks=[
+    {id:'adminClasses',icon:'🏫',title:'Moje klasy',desc:'Twórz i usuwaj klasy',start:admin.querySelector('.class-manager'),end:admin.querySelector('.class-manager')},
+    {id:'adminAccounts',icon:'👥',title:'Konta uczniów',desc:'Generuj loginy, hasła i PDF',start:[...admin.children].find(e=>e.tagName==='H3'&&e.textContent.includes('Konta uczniów')),end:admin.querySelector('#printAccounts')},
+    {id:'adminResets',icon:'🔑',title:'Reset haseł',desc:'Prośby i jednorazowe kody',start:admin.querySelector('.reset-admin'),end:admin.querySelector('.reset-admin')},
+    {id:'adminGrades',icon:'📊',title:'Oceny uczniów',desc:'Oceny, średnie i zgody',start:[...admin.children].find(e=>e.tagName==='H3'&&e.textContent.includes('Dziennik ocen')),end:admin.querySelector('#gradeEditor')}
+  ];
+  const dashboard=document.createElement('div');dashboard.id='adminTiles';dashboard.className='dashboard-tiles';
+  const back=document.createElement('button');back.id='adminBack';back.className='secondary dashboard-back hidden';back.textContent='← Wróć do kafelków';back.type='button';back.onclick=showAdminDashboard;
+  top.after(dashboard,back);
+  blocks.forEach(b=>{
+    if(!b.start||!b.end)return;
+    const panel=document.createElement('div');panel.id=b.id;panel.className='dashboard-section hidden';
+    let node=b.start;
+    while(node){const next=node.nextElementSibling;panel.append(node);if(node===b.end)break;node=next}
+    admin.append(panel);
+    const tile=document.createElement('button');tile.type='button';tile.className='dashboard-tile';
+    tile.innerHTML='<span class="tile-icon">'+b.icon+'</span><strong>'+b.title+'</strong><small>'+b.desc+'</small><span class="tile-arrow">Otwórz →</span>';
+    tile.onclick=()=>{dashboard.classList.add('hidden');back.classList.remove('hidden');blocks.forEach(x=>$(x.id)?.classList.add('hidden'));panel.classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'})};
+    dashboard.append(tile);
+  });
+  const student=$('student');const studentTop=student.querySelector('.top');const tiles=student.querySelector('nav');tiles.id='studentTiles';tiles.classList.add('dashboard-tiles');
+  const names={notes:['📒','Mój notes','Zapisuj słówka'],practice:['🎯','Ćwiczenia','Trenuj tłumaczenia'],test:['📝','Testy i PDF','Sprawdź wiedzę'],verbs:['🔤','3 formy czasowników','Ćwicz czasowniki'],grades:['📊','Moje oceny','Zobacz oceny']};
+  tiles.querySelectorAll('[data-tab]').forEach(btn=>{const [icon,title,desc]=names[btn.dataset.tab];btn.className='dashboard-tile';btn.innerHTML='<span class="tile-icon">'+icon+'</span><strong>'+title+'</strong><small>'+desc+'</small><span class="tile-arrow">Otwórz →</span>'});
+  const studentBack=document.createElement('button');studentBack.id='studentBack';studentBack.type='button';studentBack.className='secondary dashboard-back hidden';studentBack.textContent='← Wróć do kafelków';studentBack.onclick=showStudentDashboard;studentTop.after(studentBack);
+})();
+function showAdminDashboard(){
+  $('adminTiles').classList.remove('hidden');$('adminBack').classList.add('hidden');
+  ['adminClasses','adminAccounts','adminResets','adminGrades'].forEach(id=>$(id)?.classList.add('hidden'));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function showStudentDashboard(){
+  $('studentTiles').classList.remove('hidden');$('studentBack').classList.add('hidden');
+  ['notes','practice','test','verbs','grades'].forEach(id=>$(id).classList.add('hidden'));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
