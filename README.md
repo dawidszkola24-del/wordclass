@@ -48,3 +48,6 @@ UWAGA: GitHub Pages nie zapewnia serwera. Konta, hasła, prośby i kody są prze
 
 ## Nowość: kafelki i powrót
 Po zalogowaniu administrator i uczeń widzą duże kolorowe kafelki. Po wejściu w funkcję przycisk „← Wróć do kafelków” przywraca menu bez wylogowania.
+
+
+Poprawka: tabela wygenerowanych kont jest widoczna w kafelku Konta uczniów; wydruk zawiera wyłącznie loginy, hasła startowe i klasy, bez dziennika ocen. Drukuj > Zapisz jako PDF.

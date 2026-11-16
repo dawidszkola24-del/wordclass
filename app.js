@@ -30,7 +30,19 @@ $('deleteAllAccounts').onclick=()=>{const n=state.accounts.length;if(!n){msg('Ni
 $('generate').onclick=()=>{let n=Number($('count').value);if(!Number.isInteger(n)||n<1||n>50){msg('Wpisz liczbę od 1 do 50.');return}const id=$('generateClass').value;const classId=id===''?null:Number(id);if(classId!==null&&!state.classes.some(c=>c.id===classId)){msg('Wybierz istniejącą klasę.');return}for(let i=0;i<n;i++){let number=1;while(state.accounts.some(a=>a.login==='uczen'+number))number++;let login='uczen'+number;state.accounts.push({login,password:rnd(),firstLogin:true,first:'',last:'',classId})}save();renderClasses();$('filterClass').value=classId===null?'none':String(classId);renderAccounts();msg('Wygenerowano '+n+' kont. Wydrukuj dane startowe dla wybranej klasy.')};
 function printMode(mode){document.body.classList.add(mode);window.print();setTimeout(()=>document.body.classList.remove(mode),1000)}
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-accounts','print-test','print-verbs'));
-$('printAccounts').onclick=()=>{if(!visibleAccounts().length){msg('Brak uczniów do wydrukowania w wybranej klasie.');return}printMode('print-accounts')};
+$('printAccounts').onclick=()=>{
+ const selected=visibleAccounts();
+ if(!selected.length){msg('Brak uczniów do wydrukowania. Wybierz „Wszystkie klasy” lub inną klasę.');return}
+ const sheet=$('accountPrintSheet');sheet.replaceChildren();
+ const h=document.createElement('h1');h.textContent='WordClass — loginy i hasła startowe';sheet.append(h);
+ const info=document.createElement('p');info.textContent='Klasa: '+($('filterClass').selectedOptions[0]?.textContent||'Wszystkie klasy')+' | Kont: '+selected.length;sheet.append(info);
+ const table=document.createElement('table');const thead=document.createElement('thead');const tr=document.createElement('tr');
+ ['Login','Hasło startowe','Uczeń','Klasa'].forEach(label=>{const th=document.createElement('th');th.textContent=label;tr.append(th)});thead.append(tr);table.append(thead);
+ const tbody=document.createElement('tbody');selected.forEach(a=>{const row=document.createElement('tr');
+ [a.login,a.firstLogin?a.password:'Hasło zmienione',a.firstLogin?'Do aktywacji':([a.first,a.last].filter(Boolean).join(' ')||'—'),className(a.classId)].forEach(value=>{const td=document.createElement('td');td.textContent=value;row.append(td)});tbody.append(row)});table.append(tbody);sheet.append(table);
+ const note=document.createElement('p');note.textContent='Poufne: przekaż dane logowania tylko właściwym uczniom.';sheet.append(note);
+ printMode('print-accounts');
+};
 document.querySelectorAll('.logout').forEach(b=>b.onclick=()=>{user=null;$('loginPass').value='';show('home')});
 function tab(id){$('studentTiles').classList.add('hidden');$('studentBack').classList.remove('hidden');if(id==='grades')renderStudentGrades();['notes','practice','test','verbs','grades'].forEach(x=>$(x).classList.toggle('hidden',x!==id))}
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
@@ -154,3 +166,13 @@ function showStudentDashboard(){
   ['notes','practice','test','verbs','grades'].forEach(id=>$(id).classList.add('hidden'));
   window.scrollTo({top:0,behavior:'smooth'});
 }
+
+// Lista kont musi być w kafelku „Konta uczniów”, a nie w „Ocenach”.
+(function fixAccountPanel(){
+ const accountsPanel=$('adminAccounts');
+ const table=$('accounts')?.closest('.tableWrap');
+ if(accountsPanel&&table){
+   const heading=document.createElement('h3');heading.textContent='📋 Wygenerowane konta uczniów';
+   accountsPanel.append(heading,table);
+ }
+})();

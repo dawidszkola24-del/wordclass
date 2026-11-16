@@ -20,3 +20,14 @@
 .dashboard-tile .tile-icon{font-size:2.5rem}.dashboard-tile strong{font-size:1.2rem}.dashboard-tile small{font-size:.86rem;color:#6c6082}.dashboard-tile .tile-arrow{margin-top:auto;font-size:.88rem;font-weight:900;color:#7551c7}
 .dashboard-back{margin:22px 0 12px!important}.dashboard-section{padding-top:8px}
 @media print{.dashboard-tiles,.dashboard-back{display:none!important}body.print-accounts #adminAccounts{display:block!important}body.print-test #test,body.print-verbs #verbs{display:block!important}}
+
+/* Poprawiony, niezależny wydruk kont: tylko lista loginów i haseł. */
+#accountPrintSheet{display:none}
+@media print{
+ body.print-accounts > header,body.print-accounts > footer,body.print-accounts > main{display:none!important}
+ body.print-accounts > #accountPrintSheet{display:block!important;position:static!important;background:#fff;color:#111;padding:0;margin:0;font:12pt Arial,sans-serif}
+ body.print-accounts #accountPrintSheet h1{font-size:19pt;margin:0 0 12px}
+ body.print-accounts #accountPrintSheet table{width:100%;border-collapse:collapse;margin:18px 0}
+ body.print-accounts #accountPrintSheet th,body.print-accounts #accountPrintSheet td{border:1px solid #999;padding:9px;text-align:left;color:#111}
+ body.print-accounts #accountPrintSheet tr{break-inside:avoid}
+}
