@@ -15,3 +15,9 @@ Na stronie głównej są dwa osobne przyciski: Administrator i Uczeń.
 
 ## Zapisywanie PDF
 Użyj przycisku drukowania, a w oknie drukowania wybierz „Zapisz jako PDF”.
+
+
+## Klasy (wersja 3)
+Administrator może utworzyć do 10 klas, przypisywać do nich nowe konta uczniów i filtrować/drukować listy dla wybranej klasy. Usunięcie klasy nie usuwa kont uczniów — konta pozostają bez klasy. Zapis działa w localStorage tylko na bieżącym urządzeniu.
+
+UWAGA: To prototyp demonstracyjny. Hasła są przechowywane w przeglądarce, a hasło administratora jest w kodzie. Nie używać jako prawdziwego systemu kont uczniów ani do przechowywania danych osobowych. Do bezpiecznego działania między urządzeniami potrzebny jest backend i uwierzytelnianie.
