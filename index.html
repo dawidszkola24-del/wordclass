@@ -1,91 +1,23 @@
-<!doctype html>
-<html lang="pl">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#6c4df6">
-  <title>WordClass — ucz się angielskiego</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div class="bg-orb orb-one"></div><div class="bg-orb orb-two"></div>
-  <header class="topbar">
-    <a class="brand" href="#"><span class="brand-mark">W</span><span>word<span class="brand-accent">class</span></span></a>
-    <nav><a href="#features">Funkcje</a><a href="#how">Jak działa?</a></nav>
-    <button class="btn btn-light" id="loginTop">Zaloguj się <span>↗</span></button>
-  </header>
-
-  <main>
-    <section class="hero" id="home">
-      <div class="hero-copy">
-        <div class="eyebrow"><span class="spark">✦</span> ANGIELSKI, KTÓRY ZOSTAJE W GŁOWIE</div>
-        <h1>Małe kroki.<br><span class="gradient-text">Wielkie słówka.</span></h1>
-        <p class="hero-lead">Ucz się angielskiego po swojemu. Twórz własne zestawy, ćwicz w obu kierunkach i obserwuj, jak rosną Twoje umiejętności.</p>
-        <div class="hero-actions"><button class="btn btn-primary" id="heroLogin">Zaczynamy <span>→</span></button><a class="text-link" href="#features">Poznaj możliwości ↓</a></div>
-        <div class="social-proof"><div class="avatar-stack"><i>👩‍🎓</i><i>🧑‍🎓</i><i>👨‍🏫</i></div><span><b>Twoja nauka.</b> Twoje tempo.</span></div>
-      </div>
-      <div class="hero-art">
-        <div class="floating-chip chip-a">✨ Świetna robota!</div>
-        <div class="study-card">
-          <div class="card-top"><span class="pill">SŁÓWKO DNIA</span><span class="dots">•••</span></div>
-          <div class="word-emoji">🍓</div><div class="word-en">strawberry</div><div class="word-pl">truskawka</div>
-          <div class="card-bottom"><span>Twoja seria</span><b>🔥 5 dni</b></div>
-          <div class="progress"><span></span></div>
-        </div>
-        <div class="floating-chip chip-b">🇬🇧 English ↔ Polski</div>
-        <div class="mini-note"><span>📚</span><div><b>Twój notes</b><small>Do 100 słówek naraz</small></div><strong>✓</strong></div>
-      </div>
-    </section>
-
-    <section class="stats">
-      <div><b>100</b><span>słówek w jednym wklejeniu</span></div><div><b>2</b><span>kierunki tłumaczenia</span></div><div><b>∞</b><span>możliwości nauki</span></div>
-    </section>
-
-    <section class="section" id="features">
-      <div class="section-heading"><div class="eyebrow">WSZYSTKO, CZEGO POTRZEBUJESZ</div><h2>Nauka, która <span class="gradient-text">ma sens.</span></h2><p>Jedno miejsce na słówka, powtórki i sprawdziany.</p></div>
-      <div class="feature-grid">
-        <article class="feature f-purple"><div class="feature-icon">📝</div><h3>Twój notes słówek</h3><p>Wklej nawet 100 par, np. <b>apple - jabłko</b>. Zapisz zestaw i wracaj do niego, kiedy chcesz.</p></article>
-        <article class="feature f-pink"><div class="feature-icon">🔁</div><h3>Dwa kierunki</h3><p>Ćwicz angielski → polski oraz polski → angielski. Zmieniaj kierunek, by naprawdę zapamiętać słowa.</p></article>
-        <article class="feature f-yellow"><div class="feature-icon">🎯</div><h3>Testy i quizy</h3><p>Sprawdzaj wiedzę, odpowiadaj na pytania i zobacz, które słówka wymagają powtórki.</p></article>
-        <article class="feature f-blue"><div class="feature-icon">🏆</div><h3>Postępy</h3><p>Śledź wyniki i buduj pewność siebie z każdym kolejnym zestawem.</p></article>
-      </div>
-    </section>
-
-    <section class="cta" id="how"><div><div class="eyebrow">GOTOWY? GOTOWA?</div><h2>Twoje słówka czekają<br>na dobry początek.</h2><p>Zaloguj się, aby przejść do panelu nauki.</p></div><button class="btn btn-white" id="ctaLogin">Wejdź do WordClass <span>→</span></button></section>
-  </main>
-  <footer><a class="brand" href="#"><span class="brand-mark">W</span><span>word<span class="brand-accent">class</span></span></a><span>Ucz się mądrze. Powtarzaj regularnie. 💜</span><small>© 2026 WordClass</small></footer>
-
-  <div class="modal-backdrop hidden" id="loginModal">
-    <div class="modal">
-      <button class="close" id="closeModal">×</button>
-      <div class="modal-logo">W</div><div class="eyebrow">MIŁO CIĘ WIDZIEĆ</div><h2>Zaloguj się</h2>
-      <p>Wybierz konto demonstracyjne, aby zobaczyć projekt.</p>
-      <label>Login<input id="username" placeholder="np. admin lub uczen1"></label>
-      <label>Hasło<input id="password" type="password" placeholder="Wpisz hasło"></label>
-      <button class="btn btn-primary full" id="doLogin">Zaloguj się <span>→</span></button>
-      <div class="demo-hint">Demo administratora: <b>admin</b> / <b>wordclass</b><br>Demo ucznia: <b>uczen1</b> / <b>start1</b></div>
-      <div class="error" id="loginError"></div>
-    </div>
-  </div>
-
-  <section class="app hidden" id="app">
-    <header class="appbar"><a class="brand" href="#"><span class="brand-mark">W</span><span>word<span class="brand-accent">class</span></span></a><div class="user-pill" id="userPill">👋 Użytkownik</div><button class="btn btn-light" id="logout">Wyloguj</button></header>
-    <div class="app-layout">
-      <aside class="sidebar"><div class="side-label">MENU</div><button class="side-link active" data-tab="learn">📚 Nauka słówek</button><button class="side-link" data-tab="notebook">📝 Mój notes</button><button class="side-link" data-tab="progress">📈 Postępy</button><button class="side-link admin-only hidden" data-tab="admin">🛠️ Administrator</button><div class="side-tip">💡 <b>Mała rada</b><br>Ćwicz w obu kierunkach. To pomaga lepiej zapamiętać słówka!</div></aside>
-      <div class="workspace">
-        <section class="tab-panel" id="tab-learn"><div class="welcome"><div><div class="eyebrow">STREFA NAUKI</div><h1>Hej, <span id="welcomeName">Uczniu</span>! 👋</h1><p>Gotowy na kilka nowych słówek?</p></div><div class="welcome-emoji">🌈</div></div>
-          <div class="practice-box"><div class="practice-head"><div><span class="pill">SZYBKA POWTÓRKA</span><h2 id="questionDirection">Angielski → Polski</h2></div><div class="counter" id="counter">0 / 0</div></div><div class="question" id="question">Dodaj słówka w swoim notesie, aby rozpocząć.</div><div class="answer-grid" id="answers"></div><div class="practice-actions"><button class="btn btn-light" id="reverse">↔ Zmień kierunek</button><button class="btn btn-primary" id="nextQuestion">Następne słówko →</button></div><div id="feedback" class="feedback"></div></div>
-          <div class="quick-cards"><div><span>📝</span><b>Twój notes</b><small>Dodawaj własne zestawy</small><button data-goto="notebook">Otwórz notes →</button></div><div><span>🎯</span><b>Ćwicz regularnie</b><small>Krótka powtórka każdego dnia</small><button data-goto="progress">Zobacz postępy →</button></div></div>
-        </section>
-        <section class="tab-panel hidden" id="tab-notebook"><div class="page-title"><div class="eyebrow">TWOJA OSOBISTA BAZA</div><h1>Mój notes <span class="gradient-text">słówek</span> 📝</h1><p>Wklej listę w formacie: <b>apple - jabłko</b> (jedna para w każdym wierszu).</p></div>
-          <div class="notebook-card"><div class="field-head"><b>Wklej swoje słówka</b><span id="wordCount">0 / 100</span></div><textarea id="wordInput" placeholder="apple - jabłko&#10;book - książka&#10;beautiful - piękny"></textarea><div class="note-actions"><input id="setName" placeholder="Nazwa zestawu, np. Unit 1"><button class="btn btn-primary" id="saveWords">Zapisz zestaw ✨</button></div><p class="hint">Możesz wkleić maksymalnie 100 par jednocześnie. Oddziel angielskie słowo od polskiego myślnikiem.</p><div id="noteMessage" class="feedback"></div></div>
-          <h2 class="list-title">Zapisane zestawy</h2><div id="setsList" class="sets-list"></div>
-        </section>
-        <section class="tab-panel hidden" id="tab-progress"><div class="page-title"><div class="eyebrow">TAK TRZYMAJ!</div><h1>Twoje <span class="gradient-text">postępy</span> 📈</h1><p>Każda powtórka przybliża Cię do celu.</p></div><div class="progress-cards"><div><span>📚</span><b id="totalWords">0</b><small>Słówek w notesie</small></div><div><span>✅</span><b id="correctCount">0</b><small>Poprawnych odpowiedzi</small></div><div><span>🎯</span><b id="accuracy">0%</b><small>Skuteczność</small></div></div></section>
-        <section class="tab-panel hidden" id="tab-admin"><div class="page-title"><div class="eyebrow">STREFA NAUCZYCIELA</div><h1>Panel <span class="gradient-text">administratora</span> 🛠️</h1><p>Demo panelu — zarządzanie kontami w tej wersji jest lokalnym podglądem.</p></div><div class="notebook-card"><h2>Generator kont uczniów</h2><p>Wybierz liczbę kont. Dane zostaną przygotowane do wydruku.</p><div class="note-actions"><select id="accountAmount"><option>10</option><option>25</option><option>30</option><option>50</option><option>100</option></select><button class="btn btn-primary" id="generateAccounts">Generuj konta</button><button class="btn btn-light" id="printAccounts">Drukuj / PDF</button></div><div id="accountsOutput"></div></div></section>
-      </div>
-    </div>
-  </section>
-  <script src="app.js"></script>
-</body></html>
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WordClass</title><style>
+body{margin:0;font:16px Arial;background:#f7f3ff;color:#292044}header{background:linear-gradient(110deg,#7050f5,#f36eae);color:white;padding:24px}main{max-width:900px;margin:25px auto;padding:18px}.card{background:white;padding:22px;border-radius:18px;margin:15px 0;box-shadow:0 5px 25px #32205a12}button{border:0;border-radius:10px;padding:11px 16px;background:#7652ee;color:white;font-weight:bold;cursor:pointer;margin:5px}input,textarea,select{padding:12px;border:1px solid #ddd;border-radius:9px;margin:5px;max-width:100%}textarea{width:95%;height:140px}.hidden{display:none}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.word{padding:12px;border:1px solid #eee;border-radius:10px;margin:7px}.good{background:#e4fff1}.bad{background:#ffe8ef}</style></head><body><header><h1>🌈 WordClass</h1><p>Angielski ↔ Polski — ucz się we własnym tempie!</p></header><main>
+<section id="login" class="card"><h2>Logowanie</h2><input id="u" placeholder="Login"><input id="p" type="password" placeholder="Hasło"><button onclick="login()">Zaloguj</button><p id="err"></p><small>Demo: admin / wordclass albo uczen1 / start1</small></section>
+<section id="panel" class="hidden"><div class="row"><h2 id="hello"></h2><button onclick="logout()">Wyloguj</button></div>
+<div class="row"><button onclick="tab('notes')">📝 Notes słówek</button><button onclick="tab('quiz')">🎯 Test online</button><button onclick="tab('admin')">🛠️ Admin</button></div>
+<section id="notes" class="card"><h2>Mój notes — maks. 100 słówek na raz</h2><p>Wklej po jednej parze w wierszu, np. apple - jabłko</p><textarea id="words" placeholder="apple - jabłko&#10;book - książka"></textarea><div class="row"><input id="setname" placeholder="Nazwa zestawu"><button onclick="saveWords()">Zapisz słówka</button></div><p id="msg"></p><div id="sets"></div></section>
+<section id="quiz" class="card hidden"><h2>Test online</h2><p>Wybierz kierunek i rozpocznij test z zapisanych słówek.</p><select id="dir"><option value="en">Angielski → Polski</option><option value="pl">Polski → Angielski</option></select><button onclick="startQuiz()">Rozpocznij test</button><h2 id="question"></h2><div id="opts"></div><p id="result"></p><button onclick="next()">Następne</button><button onclick="printTest()">Drukuj test / Zapisz PDF</button></section>
+<section id="admin" class="card hidden"><h2>Panel administratora</h2><p>Generuj konta demonstracyjne, usuwaj je i drukuj listę jako PDF.</p><select id="amount"><option>10</option><option>25</option><option>30</option><option>50</option><option>100</option></select><button onclick="generate()">Generuj konta</button><button onclick="printAccounts()">Drukuj loginy i hasła / PDF</button><div id="accounts"></div></section></section></main>
+<script>
+let who='',quiz=[],pos=0,score=0,chosen=0,accounts=JSON.parse(localStorage.wcAccounts||'[]');
+function login(){let u=document.getElementById('u').value,p=document.getElementById('p').value;if((u==='admin'&&p==='wordclass')||(u==='uczen1'&&p==='start1')||accounts.some(a=>a.u===u&&a.p===p)){who=u;document.getElementById('login').classList.add('hidden');document.getElementById('panel').classList.remove('hidden');document.getElementById('hello').textContent='Witaj, '+u+'!';if(u!=='admin')document.querySelector('[onclick="tab(\'admin\')"]').classList.add('hidden');renderSets();}else document.getElementById('err').textContent='Nieprawidłowy login lub hasło.'}
+function logout(){location.reload()}function tab(t){['notes','quiz','admin'].forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==t));if(t==='admin')renderAccounts()}
+function data(){return JSON.parse(localStorage['wc_'+who]||'[]')}function saveWords(){let lines=document.getElementById('words').value.trim().split(/\n/).filter(Boolean);if(!lines.length||lines.length>100){msg.textContent='Wklej od 1 do 100 par.';return}let pairs=[];for(let l of lines){let a=l.split(/\s+-\s+| – | — /);if(a.length<2){msg.textContent='Użyj formatu apple - jabłko';return}pairs.push({en:a[0].trim(),pl:a.slice(1).join('-').trim()})}let d=data();d.push({name:setname.value||'Zestaw '+(d.length+1),pairs});localStorage['wc_'+who]=JSON.stringify(d);words.value='';msg.textContent='Zapisano '+pairs.length+' słówek!';renderSets()}
+function renderSets(){sets.innerHTML=data().map(s=>'<div class="word"><b>'+s.name+'</b> — '+s.pairs.length+' słówek</div>').join('')}
+function allWords(){return data().flatMap(s=>s.pairs)}
+function startQuiz(){quiz=allWords().sort(()=>Math.random()-.5);pos=0;score=0;showQ()}
+function showQ(){if(!quiz.length){question.textContent='Dodaj najpierw słówka w notesie.';opts.innerHTML='';return}if(pos>=quiz.length){question.textContent='Koniec! Wynik: '+score+'/'+quiz.length;opts.innerHTML='';return}let p=quiz[pos],en=dir.value==='en',q=en?p.en:p.pl,ans=en?p.pl:p.en;question.textContent=q;result.textContent='Pytanie '+(pos+1)+'/'+quiz.length;let pool=allWords().map(x=>en?x.pl:x.en).filter(x=>x!==ans).sort(()=>Math.random()-.5).slice(0,3);[ans,...pool].sort(()=>Math.random()-.5).forEach(x=>{let b=document.createElement('button');b.textContent=x;b.onclick=()=>{if(b.dataset.done)return;b.dataset.done=1;if(x===ans){score++;b.classList.add('good');result.textContent='Brawo!'}else{b.classList.add('bad');result.textContent='Poprawna odpowiedź: '+ans}};opts.appendChild(b)})}
+function next(){pos++;showQ()}function printTest(){let a=allWords();if(!a.length)return alert('Dodaj słówka.');let w=window.open('','_blank');w.document.write('<h1>WordClass — test</h1><p>Imię i nazwisko: ___________________</p><ol>'+a.map(x=>'<li>'+x.en+' — __________________</li>').join('')+'</ol><h2>Klucz odpowiedzi</h2><ol>'+a.map(x=>'<li>'+x.en+' — '+x.pl+'</li>').join('')+'</ol><script>window.print()<\/script>');w.document.close()}
+function generate(){let n=+amount.value,start=accounts.length+1;for(let i=0;i<n;i++)accounts.push({u:'uczen'+(start+i),p:Math.random().toString(36).slice(2,7).toUpperCase()});localStorage.wcAccounts=JSON.stringify(accounts);renderAccounts()}
+function renderAccounts(){accounts=JSON.parse(localStorage.wcAccounts||'[]');document.getElementById('accounts').innerHTML=accounts.map((a,i)=>'<div class="word row"><b>'+a.u+'</b> — '+a.p+' <button onclick="removeAccount('+i+')">Usuń</button></div>').join('')||'Brak wygenerowanych kont.'}
+function removeAccount(i){if(confirm('Usunąć konto '+accounts[i].u+'?')){accounts.splice(i,1);localStorage.wcAccounts=JSON.stringify(accounts);renderAccounts()}}
+function printAccounts(){if(!accounts.length)return alert('Najpierw wygeneruj konta.');let w=window.open('','_blank');w.document.write('<h1>WordClass — loginy i hasła</h1><table border="1" cellpadding="8"><tr><th>Login</th><th>Hasło</th></tr>'+accounts.map(a=>'<tr><td>'+a.u+'</td><td>'+a.p+'</td></tr>').join('')+'</table><script>window.print()<\/script>');w.document.close()}
+</script></body></html>
