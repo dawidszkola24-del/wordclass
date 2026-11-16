@@ -52,12 +52,18 @@ $('saveWords').onclick=()=>{let lines=$('wordInput').value.split(/\r?\n/).map(x=
 function shuffled(a){return [...a].sort(()=>Math.random()-.5)}
 $('nextQuestion').onclick=()=>{let all=words();if(all.length<2){$('question').textContent='Dodaj co najmniej 2 słówka.';$('answers').replaceChildren();return}let dir=$('direction').value,src=dir==='enpl'?'en':'pl',dst=dir==='enpl'?'pl':'en';let target=all[Math.floor(Math.random()*all.length)];let options=shuffled([...new Set([target[dst],...shuffled(all).map(x=>x[dst])])].slice(0,4));$('question').textContent='Przetłumacz: '+target[src];$('answers').replaceChildren();$('feedback').textContent='';options.forEach(value=>{let b=document.createElement('button');b.textContent=value;b.onclick=()=>{$('feedback').textContent=value===target[dst]?'✅ Dobrze!':'❌ Poprawna odpowiedź: '+target[dst]};$('answers').append(b)})};
 let onlineTest=[];
+let onlineTestGraded=false;
+let onlineTestId=null;
+function percentToGrade(pct){if(pct>=95)return "6";if(pct>=85)return "5";if(pct>=70)return "4";if(pct>=50)return "3";if(pct>=30)return "2";return "1";}
 function normalizeAnswer(value){return String(value||'').trim().toLocaleLowerCase('pl-PL').replace(/\s+/g,' ')}
 $('makeTest').onclick=()=>{
+ if(!user||user.admin){msg('Zaloguj się jako uczeń, aby rozwiązać test i zapisać ocenę.');return}
  const all=shuffled(words());if(!all.length){msg('Najpierw dodaj słówka w notesie.');return}
  const mode=$('testMode').value,dir=$('testDirection').value;
  const count=$('testCount').value==='all'?all.length:Math.min(all.length,Number($('testCount').value));
  if(mode==='abcd' && new Set(all.map(w=>normalizeAnswer(w.en))).size<2 && new Set(all.map(w=>normalizeAnswer(w.pl))).size<2){msg('Do testu ABCD dodaj co najmniej 2 różne słówka.');return}
+ onlineTestGraded=false;
+ onlineTestId=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
  onlineTest=all.slice(0,count).map(w=>{
   const d=dir==='mixed'?(Math.random()<.5?'enpl':'plen'):dir;
   const src=d==='enpl'?'en':'pl',dst=d==='enpl'?'pl':'en';
@@ -79,7 +85,7 @@ $('makeTest').onclick=()=>{
  msg('Test online gotowy. Po rozwiązaniu kliknij „Sprawdź wynik”.');
 };
 $('checkTest').onclick=()=>{
- if(!onlineTest.length)return;
+ if(!onlineTest.length||onlineTestGraded||!user||user.admin)return;
  let correct=0;const items=[...$('testSheet').querySelectorAll('.online-question')];
  items.forEach((item,i)=>{
   const q=onlineTest[i];const selected=item.querySelector('input[type="radio"]:checked');const typed=item.querySelector('input.online-answer');
@@ -88,7 +94,18 @@ $('checkTest').onclick=()=>{
   item.querySelector('.online-feedback').textContent=ok?'✅ Poprawnie':'❌ Poprawna odpowiedź: '+q.answer;
  });
  const pct=Math.round(correct/onlineTest.length*100);
- $('testResult').textContent='🎯 Wynik: '+correct+' / '+onlineTest.length+' ('+pct+'%). Wynik nie jest automatycznie wpisywany do dziennika ocen.';
+ const grade=percentToGrade(pct);
+ const login=user.login;
+ const grades=(state.grades[login] ||= []);
+ if(!grades.some(g=>g.testId===onlineTestId)){
+  grades.push({value:grade,type:'egzamin',date:new Date().toLocaleDateString('pl-PL'),percent:pct,testId:onlineTestId,description:'Automatyczna ocena za test online'});
+  save();
+ }
+ onlineTestGraded=true;
+ $('checkTest').disabled=true;
+ items.forEach(item=>item.querySelectorAll('input').forEach(input=>input.disabled=true));
+ $('testResult').textContent='🎯 Wynik: '+correct+' / '+onlineTest.length+' ('+pct+'%). Ocena: '+grade+'. 🟠 Automatycznie wpisano do dziennika ocen.';
+ renderStudentGrades();
 };
 $('printTest').onclick=()=>{if(!$('testSheet').children.length){msg('Najpierw utwórz test.');return}printMode('print-test')};
 
@@ -173,7 +190,7 @@ $('redeemResetCode').onclick=()=>{
     {id:'adminClasses',icon:'🏫',title:'Moje klasy',desc:'Twórz i usuwaj klasy',start:admin.querySelector('.class-manager'),end:admin.querySelector('.class-manager')},
     {id:'adminAccounts',icon:'👥',title:'Konta uczniów',desc:'Generuj loginy, hasła i PDF',start:[...admin.children].find(e=>e.tagName==='H3'&&e.textContent.includes('Konta uczniów')),end:admin.querySelector('#printAccounts')},
     {id:'adminResets',icon:'🔑',title:'Reset haseł',desc:'Prośby i jednorazowe kody',start:admin.querySelector('.reset-admin'),end:admin.querySelector('.reset-admin')},
-    {id:'adminGrades',icon:'📊',title:'Oceny uczniów',desc:'Oceny, średnie i zgody',start:[...admin.children].find(e=>e.tagName==='H3'&&e.textContent.includes('Dziennik ocen')),end:admin.querySelector('#gradeEditor')}
+    {id:'adminGrades',icon:'📊',title:'Oceny uczniów',desc:'Oceny i średnie',start:[...admin.children].find(e=>e.tagName==='H3'&&e.textContent.includes('Dziennik ocen')),end:admin.querySelector('#gradeEditor')}
   ];
   const dashboard=document.createElement('div');dashboard.id='adminTiles';dashboard.className='dashboard-tiles';
   const back=document.createElement('button');back.id='adminBack';back.className='secondary dashboard-back hidden';back.textContent='← Wróć do kafelków';back.type='button';back.onclick=showAdminDashboard;
@@ -189,14 +206,20 @@ $('redeemResetCode').onclick=()=>{
     tile.onclick=()=>openAdminSection(b.id);
     dashboard.append(tile);
   });
+  // Oddzielny kafelek i ekran do akceptowania próśb o średnią.
+  const approvals=document.createElement('div');approvals.id='adminApprovals';approvals.className='dashboard-section hidden';admin.append(approvals);
+  const approvalsTile=document.createElement('button');approvalsTile.type='button';approvalsTile.id='approvalsTile';approvalsTile.className='dashboard-tile';
+  approvalsTile.innerHTML='<span class="tile-icon">📨</span><strong>Akceptacja średniej</strong><small id="approvalsTileDescription">Prośby uczniów o dostęp na 24 godziny</small><span class="tile-arrow">Otwórz →</span>';
+  approvalsTile.onclick=()=>openAdminSection('adminApprovals');dashboard.append(approvalsTile);
   const student=$('student');const studentTop=student.querySelector('.top');const tiles=student.querySelector('nav');tiles.id='studentTiles';tiles.classList.add('dashboard-tiles');
   const names={notes:['📒','Mój notes','Zapisuj słówka'],practice:['🎯','Ćwiczenia','Trenuj tłumaczenia'],test:['📝','Testy i PDF','Sprawdź wiedzę'],verbs:['🔤','3 formy czasowników','Ćwicz czasowniki'],grades:['📊','Moje oceny','Zobacz oceny']};
   tiles.querySelectorAll('[data-tab]').forEach(btn=>{const [icon,title,desc]=names[btn.dataset.tab];btn.className='dashboard-tile';btn.innerHTML='<span class="tile-icon">'+icon+'</span><strong>'+title+'</strong><small>'+desc+'</small><span class="tile-arrow">Otwórz →</span>'});
   const studentBack=document.createElement('button');studentBack.id='studentBack';studentBack.type='button';studentBack.className='secondary dashboard-back hidden';studentBack.textContent='← Wróć do kafelków';studentBack.onclick=showStudentDashboard;studentTop.after(studentBack);
 })();
 function showAdminDashboard(){
+  renderAverageRequests();
   $('adminTiles').classList.remove('hidden');$('adminBack').classList.add('hidden');
-  ['adminClasses','adminAccounts','adminResets','adminGrades'].forEach(id=>$(id)?.classList.add('hidden'));
+  ['adminClasses','adminAccounts','adminResets','adminGrades','adminApprovals'].forEach(id=>$(id)?.classList.add('hidden'));
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function showStudentDashboard(){
@@ -222,15 +245,15 @@ function showStudentDashboard(){
  const pending=document.createElement('div');pending.id='averageRequestInbox';pending.className='grade-editor';
  const heading=document.createElement('h3');heading.textContent='📨 Prośby uczniów o pokazanie średniej';
  const list=document.createElement('div');list.id='averageRequestList';pending.append(heading,list);
- panel.insertBefore(pending,panel.firstChild);
+ $('adminApprovals').append(pending);
  const heading2=document.createElement('h3');heading2.textContent='👥 Wybierz ucznia, aby zobaczyć oceny i średnią';
  const studentList=document.createElement('div');studentList.id='gradeStudentPicker';
  panel.insertBefore(studentList,$('gradeEditor'));panel.insertBefore(heading2,studentList);
 })();
 function openAdminSection(id){
  $('adminTiles').classList.add('hidden');$('adminBack').classList.remove('hidden');
- ['adminClasses','adminAccounts','adminResets','adminGrades'].forEach(x=>$(x)?.classList.toggle('hidden',x!==id));
- if(id==='adminGrades')renderAverageRequests();
+ ['adminClasses','adminAccounts','adminResets','adminGrades','adminApprovals'].forEach(x=>$(x)?.classList.toggle('hidden',x!==id));
+ if(id==='adminGrades'||id==='adminApprovals')renderAverageRequests();
  window.scrollTo({top:0,behavior:'smooth'});
 }
 function renderAverageRequests(){
@@ -238,6 +261,7 @@ function renderAverageRequests(){
  if(!inbox||!picker)return;
  inbox.replaceChildren();picker.replaceChildren();
  const pending=state.accounts.filter(a=>state.averageRequests[a.login]?.status==='pending');
+ const countLabel=$('approvalsTileDescription');if(countLabel)countLabel.textContent=pending.length?('🔔 Nowe prośby: '+pending.length):'Prośby uczniów o dostęp na 24 godziny';
  if(!pending.length){const p=document.createElement('p');p.className='muted';p.textContent='Brak nowych próśb.';inbox.append(p)}
  pending.forEach(a=>{
   const row=document.createElement('div');row.className='grade-row';

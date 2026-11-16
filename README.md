@@ -58,3 +58,10 @@ W kafelku „Testy i PDF” uczeń wybiera ABCD lub zadania otwarte, mieszany ki
 
 ## Poprawka dziennika ocen
 W kafelku Oceny uczniów widoczna jest lista uczniów i skrzynka próśb. Nauczyciel może zaakceptować średnią na 24 godziny albo odrzucić prośbę. Uczeń zawsze widzi swoje oceny, ale średnią tylko po akceptacji. Dane lokalne w jednej przeglądarce.
+
+## Osobny kafelek akceptacji średniej
+W panelu administratora jest oddzielny kafelek **📨 Akceptacja średniej** z liczbą oczekujących próśb. Uczeń wysyła prośbę w Moje oceny, a administrator zatwierdza na 24 godziny lub odrzuca. Oceny i średnie pozostają w kafelku **📊 Oceny uczniów**. Wersja demonstracyjna zapisuje dane wyłącznie w przeglądarce.
+
+
+## Automatyczne oceny testów online
+Po kliknięciu „Sprawdź wynik” zalogowanemu uczniowi wpisywana jest ocena typu „Egzamin na stronie” (pomarańczowa) do lokalnego dziennika ocen. Skala: 0–29% = 1, 30–49% = 2, 50–69% = 3, 70–84% = 4, 85–94% = 5, 95–100% = 6. Test można sprawdzić tylko raz, by nie zapisywać duplikatów; nowy test pozwala na nową próbę. Administrator nie rozwiązuje testu w swoim panelu w tej wersji. Wszystkie dane są lokalne w przeglądarce; nie jest to bezpieczny dziennik dla prawdziwych uczniów.
