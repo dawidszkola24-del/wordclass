@@ -1,282 +1,572 @@
-/* WordClass demo: localStorage only, NOT a secure or shared authentication service. */
-const $=id=>document.getElementById(id);
-const KEY='wordclass_demo_v2';
-let state;try{state=JSON.parse(localStorage.getItem(KEY))||{accounts:[],nextId:1,words:{}}}catch{state={accounts:[],nextId:1,words:{}}}
-state.accounts ||= [];state.words ||= {};state.nextId ||= 1;state.classes ||= [];state.nextClassId ||= 1;state.verbs ||= {};state.grades ||= {};state.averageRequests ||= {};state.passwordResets ||= {};
-let user=null,question=null,loginRole='student';
-const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
-const show=(id)=>{['home','login','setup','admin','student'].forEach(x=>$(x).classList.toggle('hidden',x!==id));$('message').textContent=''};
-const msg=t=>$('message').textContent=t;
-const rnd=()=>{const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';let a=new Uint32Array(5);crypto.getRandomValues(a);return Array.from(a,n=>chars[n%chars.length]).join('')};
-function login(){let name=$('loginName').value.trim(),pass=$('loginPass').value;if(loginRole==='admin'&&name==='admin'&&pass==='Dawid12121'){user={admin:true};renderClasses();renderAccounts();renderResetRequests();show('admin');showAdminDashboard();return}if(loginRole==='admin'){msg('Nieprawidłowe dane administratora.');return}let found=state.accounts.find(a=>a.login===name&&a.password===pass);if(!found){msg('Nieprawidłowy login lub hasło.');return}user=found;if(found.firstLogin){show('setup')}else{openStudent()}}
-function openLogin(role){loginRole=role;$('loginHeading').textContent=role==='admin'?'👩‍🏫 Logowanie administratora':'🎓 Logowanie ucznia';$('loginIcon').textContent=role==='admin'?'👩‍🏫':'🎓';$('loginHelp').textContent=role==='admin'?'Zarządzaj kontami swojej klasy.':'Wpisz login i hasło otrzymane od administratora.';$('demoHint').textContent=role==='admin'?'DEMO: login admin, hasło ustawione przez właściciela':'Konto ucznia tworzy administrator na tym urządzeniu.';$('loginName').value='';$('loginPass').value='';$('resetLoginArea').classList.toggle('hidden',role!=='student');$('resetRequestForm').classList.add('hidden');$('resetCodeForm').classList.add('hidden');show('login');$('loginName').focus()}$('goAdmin').onclick=()=>openLogin('admin');$('goStudent').onclick=()=>openLogin('student');$('backHome').onclick=()=>show('home');$('signIn').onclick=login;
-$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
-$('finishSetup').onclick=()=>{let first=$('firstName').value.trim(),last=$('lastName').value.trim(),pass=$('newPassword').value;if(!first||!last||!pass||pass.length>10){msg('Wpisz imię, nazwisko i hasło do 10 znaków.');return}user.first=first;user.last=last;user.password=pass;user.firstLogin=false;save();openStudent()};
-function openStudent(){$('verbInput').value=(state.verbs[user.login]||[]).map(v=>[v.base,v.past,v.participle,v.pl].join(' - ')).join('\n');countVerbs();$('studentTitle').textContent='Cześć, '+(user.first||user.login)+'!';$('wordInput').value=(state.words[user.login]||[]).map(x=>x.en+' - '+x.pl).join('\n');countWords();show('student');showStudentDashboard();renderStudentGrades()}
-function className(id){return state.classes.find(c=>c.id===id)?.name||'Bez klasy'}
-function renderClasses(){
- $('classLimit').textContent=state.classes.length+' / 10';$('classList').replaceChildren();
- state.classes.forEach(c=>{const box=document.createElement('div');box.className='class-item';const info=document.createElement('strong');const total=state.accounts.filter(a=>a.classId===c.id).length;info.textContent='🏫 '+c.name+' — '+total+' uczniów';const del=document.createElement('button');del.textContent='Usuń klasę';del.className='danger';del.onclick=()=>{if(!confirm('Usunąć klasę '+c.name+'? Uczniowie pozostaną bez klasy.'))return;state.classes=state.classes.filter(x=>x.id!==c.id);state.accounts.forEach(a=>{if(a.classId===c.id)a.classId=null});save();renderClasses();renderAccounts();msg('Usunięto klasę. Konta uczniów zostały zachowane.')};box.append(info,del);$('classList').append(box)});
- const gen=$('generateClass'),filter=$('filterClass'),previousGen=gen.value,previousFilter=filter.value;gen.replaceChildren();filter.replaceChildren();
- function option(sel,value,label){const o=document.createElement('option');o.value=value;o.textContent=label;sel.append(o)}
- option(gen,'','Bez klasy');option(filter,'all','Wszystkie klasy');option(filter,'none','Bez klasy');state.classes.forEach(c=>{option(gen,String(c.id),c.name);option(filter,String(c.id),c.name)});
- if([...gen.options].some(o=>o.value===previousGen))gen.value=previousGen;if([...filter.options].some(o=>o.value===previousFilter))filter.value=previousFilter;
+
+/*
+  WordClass — etap 1: Supabase
+  Logowanie administratora i zarządzanie klasami.
+  Konta uczniów, oceny i testy zostaną podłączone później.
+*/
+
+const $ = id => document.getElementById(id);
+
+const db = window.wordclassSupabase;
+
+let user = null;
+let loginRole = 'student';
+let classes = [];
+
+function msg(text) {
+  const element = $('message');
+  if (element) element.textContent = text;
 }
-$('addClass').onclick=()=>{const name=$('className').value.trim();if(!name){msg('Wpisz nazwę klasy.');return}if(state.classes.length>=10){msg('Można mieć maksymalnie 10 klas.');return}if(state.classes.some(c=>c.name.toLocaleLowerCase('pl')===name.toLocaleLowerCase('pl'))){msg('Klasa o tej nazwie już istnieje.');return}state.classes.push({id:state.nextClassId++,name});$('className').value='';save();renderClasses();msg('Dodano klasę '+name+'.')};
-$('filterClass').onchange=renderAccounts;
-function visibleAccounts(){const filter=$('filterClass').value;return state.accounts.filter(a=>filter==='all'||(filter==='none'?!a.classId:String(a.classId)===filter))}
-function renderAccounts(){renderResetRequests();$('totalAccounts').textContent='Łącznie kont uczniów we wszystkich klasach: '+state.accounts.length+'. Wyświetlany filtr może ukrywać konta z innych klas.';$('accounts').replaceChildren();visibleAccounts().forEach(a=>{let tr=document.createElement('tr');[a.login,a.firstLogin?a.password:'(zmienione)',a.firstLogin?'Nieaktywowane':(a.first+' '+a.last),className(a.classId)].forEach(t=>{let td=document.createElement('td');td.textContent=t;tr.append(td)});let gradeTd=document.createElement('td');const gb=document.createElement('button');gb.className='secondary';gb.textContent='📊 Oceny';gb.onclick=()=>openGradeEditor(a.login);gradeTd.append(gb);const small=document.createElement('div');small.className='muted small';small.textContent='Średnia: '+averageText(a.login);gradeTd.append(small);if(state.averageRequests[a.login]?.status==='pending'){const badge=document.createElement('span');badge.className='pending';badge.textContent='📨 Prośba ucznia';gradeTd.append(badge)}tr.append(gradeTd);let td=document.createElement('td'),b=document.createElement('button');b.textContent='Usuń';b.onclick=()=>{if(confirm('Usunąć konto '+a.login+'?')){state.accounts=state.accounts.filter(x=>x!==a);delete state.words[a.login];delete state.verbs[a.login];delete state.grades[a.login];delete state.averageRequests[a.login];delete state.passwordResets[a.login];if(editingGradeLogin===a.login){editingGradeLogin=null;$('gradeEditor').classList.add('hidden')}save();renderClasses();renderAccounts()}};td.append(b);tr.append(td);$('accounts').append(tr)})}
-$('deleteAllAccounts').onclick=()=>{const n=state.accounts.length;if(!n){msg('Nie ma żadnych kont. Następny login będzie uczen1.');return}if(!confirm('UWAGA: Usunąć WSZYSTKIE '+n+' kont uczniów ze WSZYSTKICH klas? Znikną również ich słówka, czasowniki i oceny zapisane w tej przeglądarce. Tej operacji nie można cofnąć.'))return;const confirmation=prompt('Aby potwierdzić usunięcie wszystkich kont, wpisz dokładnie: USUN');if(confirmation!=='USUN'){msg('Anulowano usuwanie kont.');return}state.accounts=[];state.words={};state.verbs={};state.grades={};state.averageRequests={};state.passwordResets={};state.nextId=1;editingGradeLogin=null;$('gradeEditor').classList.add('hidden');save();renderClasses();$('filterClass').value='all';renderAccounts();msg('Usunięto wszystkie konta. Następny wygenerowany login: uczen1.')};
-$('generate').onclick=()=>{let n=Number($('count').value);if(!Number.isInteger(n)||n<1||n>50){msg('Wpisz liczbę od 1 do 50.');return}const id=$('generateClass').value;const classId=id===''?null:Number(id);if(classId!==null&&!state.classes.some(c=>c.id===classId)){msg('Wybierz istniejącą klasę.');return}for(let i=0;i<n;i++){let number=1;while(state.accounts.some(a=>a.login==='uczen'+number))number++;let login='uczen'+number;state.accounts.push({login,password:rnd(),firstLogin:true,first:'',last:'',classId})}save();renderClasses();$('filterClass').value=classId===null?'none':String(classId);renderAccounts();msg('Wygenerowano '+n+' kont. Wydrukuj dane startowe dla wybranej klasy.')};
-function printMode(mode){document.body.classList.add(mode);window.print();setTimeout(()=>document.body.classList.remove(mode),1000)}
-window.addEventListener('afterprint',()=>document.body.classList.remove('print-accounts','print-test','print-verbs'));
-$('printAccounts').onclick=()=>{
- const selected=visibleAccounts();
- if(!selected.length){msg('Brak uczniów do wydrukowania. Wybierz „Wszystkie klasy” lub inną klasę.');return}
- const sheet=$('accountPrintSheet');sheet.replaceChildren();
- const h=document.createElement('h1');h.textContent='WordClass — loginy i hasła startowe';sheet.append(h);
- const info=document.createElement('p');info.textContent='Klasa: '+($('filterClass').selectedOptions[0]?.textContent||'Wszystkie klasy')+' | Kont: '+selected.length;sheet.append(info);
- const table=document.createElement('table');const thead=document.createElement('thead');const tr=document.createElement('tr');
- ['Login','Hasło startowe','Uczeń','Klasa'].forEach(label=>{const th=document.createElement('th');th.textContent=label;tr.append(th)});thead.append(tr);table.append(thead);
- const tbody=document.createElement('tbody');selected.forEach(a=>{const row=document.createElement('tr');
- [a.login,a.firstLogin?a.password:'Hasło zmienione',a.firstLogin?'Do aktywacji':([a.first,a.last].filter(Boolean).join(' ')||'—'),className(a.classId)].forEach(value=>{const td=document.createElement('td');td.textContent=value;row.append(td)});tbody.append(row)});table.append(tbody);sheet.append(table);
- const note=document.createElement('p');note.textContent='Poufne: przekaż dane logowania tylko właściwym uczniom.';sheet.append(note);
- printMode('print-accounts');
-};
-document.querySelectorAll('.logout').forEach(b=>b.onclick=()=>{user=null;$('loginPass').value='';show('home')});
-function tab(id){$('studentTiles').classList.add('hidden');$('studentBack').classList.remove('hidden');if(id==='grades')renderStudentGrades();['notes','practice','test','verbs','grades'].forEach(x=>$(x).classList.toggle('hidden',x!==id))}
-document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
-const words=()=>state.words[user.login]||[];
-function countWords(){$('wordCount').textContent='Zapisane słówka: '+words().length+' / 100'}
-$('saveWords').onclick=()=>{let lines=$('wordInput').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(lines.length>100){msg('Maksymalnie 100 par słówek.');return}let parsed=[];for(let line of lines){let m=line.match(/^(.+?)\s+[-–—]\s+(.+)$/);if(!m){msg('Popraw format: angielskie - polskie (błędna linia: '+line+')');return}parsed.push({en:m[1].trim(),pl:m[2].trim()})}state.words[user.login]=parsed;save();countWords();msg('Słówka zapisane na tym urządzeniu.')};
-function shuffled(a){return [...a].sort(()=>Math.random()-.5)}
-$('nextQuestion').onclick=()=>{let all=words();if(all.length<2){$('question').textContent='Dodaj co najmniej 2 słówka.';$('answers').replaceChildren();return}let dir=$('direction').value,src=dir==='enpl'?'en':'pl',dst=dir==='enpl'?'pl':'en';let target=all[Math.floor(Math.random()*all.length)];let options=shuffled([...new Set([target[dst],...shuffled(all).map(x=>x[dst])])].slice(0,4));$('question').textContent='Przetłumacz: '+target[src];$('answers').replaceChildren();$('feedback').textContent='';options.forEach(value=>{let b=document.createElement('button');b.textContent=value;b.onclick=()=>{$('feedback').textContent=value===target[dst]?'✅ Dobrze!':'❌ Poprawna odpowiedź: '+target[dst]};$('answers').append(b)})};
-let onlineTest=[];
-let onlineTestGraded=false;
-let onlineTestId=null;
-function percentToGrade(pct){if(pct>=95)return "6";if(pct>=85)return "5";if(pct>=70)return "4";if(pct>=50)return "3";if(pct>=30)return "2";return "1";}
-function normalizeAnswer(value){return String(value||'').trim().toLocaleLowerCase('pl-PL').replace(/\s+/g,' ')}
-$('makeTest').onclick=()=>{
- if(!user||user.admin){msg('Zaloguj się jako uczeń, aby rozwiązać test i zapisać ocenę.');return}
- const all=shuffled(words());if(!all.length){msg('Najpierw dodaj słówka w notesie.');return}
- const mode=$('testMode').value,dir=$('testDirection').value;
- const count=$('testCount').value==='all'?all.length:Math.min(all.length,Number($('testCount').value));
- if(mode==='abcd' && new Set(all.map(w=>normalizeAnswer(w.en))).size<2 && new Set(all.map(w=>normalizeAnswer(w.pl))).size<2){msg('Do testu ABCD dodaj co najmniej 2 różne słówka.');return}
- onlineTestGraded=false;
- onlineTestId=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
- onlineTest=all.slice(0,count).map(w=>{
-  const d=dir==='mixed'?(Math.random()<.5?'enpl':'plen'):dir;
-  const src=d==='enpl'?'en':'pl',dst=d==='enpl'?'pl':'en';
-  const alternatives=shuffled([...new Set(all.map(x=>x[dst]).filter(v=>normalizeAnswer(v)!==normalizeAnswer(w[dst])))]).slice(0,3);
-  return {prompt:w[src],answer:w[dst],direction:d,options:shuffled([w[dst],...alternatives])};
- });
- const sheet=$('testSheet');sheet.replaceChildren();
- const h=document.createElement('h3');h.textContent='📝 Test online — '+(mode==='abcd'?'ABCD':'zadania otwarte');sheet.append(h);
- const intro=document.createElement('p');intro.textContent='Pytania: '+onlineTest.length+'. Wybierz lub wpisz odpowiedzi, potem kliknij „Sprawdź wynik”.';sheet.append(intro);
- onlineTest.forEach((q,i)=>{
-  const item=document.createElement('fieldset');item.className='online-question';item.dataset.index=String(i);
-  const legend=document.createElement('legend');legend.textContent=(i+1)+'. '+q.prompt+' ('+(q.direction==='enpl'?'EN → PL':'PL → EN')+')';item.append(legend);
-  if(mode==='abcd'){
-   q.options.forEach((answer,j)=>{const label=document.createElement('label');label.className='online-choice';const input=document.createElement('input');input.type='radio';input.name='onlineQ'+i;input.value=answer;const letter=document.createElement('strong');letter.textContent=' '+String.fromCharCode(65+j)+'. ';label.append(input,letter,document.createTextNode(answer));item.append(label)});
-  }else{const input=document.createElement('input');input.type='text';input.className='online-answer';input.autocomplete='off';input.placeholder='Wpisz tłumaczenie';input.setAttribute('aria-label','Odpowiedź na pytanie '+(i+1));item.append(input)}
-  const feedback=document.createElement('p');feedback.className='online-feedback';feedback.setAttribute('aria-live','polite');item.append(feedback);sheet.append(item);
- });
- $('testResult').textContent='';$('checkTest').disabled=false;
- msg('Test online gotowy. Po rozwiązaniu kliknij „Sprawdź wynik”.');
-};
-$('checkTest').onclick=()=>{
- if(!onlineTest.length||onlineTestGraded||!user||user.admin)return;
- let correct=0;const items=[...$('testSheet').querySelectorAll('.online-question')];
- items.forEach((item,i)=>{
-  const q=onlineTest[i];const selected=item.querySelector('input[type="radio"]:checked');const typed=item.querySelector('input.online-answer');
-  const answer=typed?typed.value:(selected?selected.value:'');const ok=normalizeAnswer(answer)===normalizeAnswer(q.answer);
-  if(ok)correct++;item.classList.toggle('online-correct',ok);item.classList.toggle('online-incorrect',!ok);
-  item.querySelector('.online-feedback').textContent=ok?'✅ Poprawnie':'❌ Poprawna odpowiedź: '+q.answer;
- });
- const pct=Math.round(correct/onlineTest.length*100);
- const grade=percentToGrade(pct);
- const login=user.login;
- const grades=(state.grades[login] ||= []);
- if(!grades.some(g=>g.testId===onlineTestId)){
-  grades.push({value:grade,type:'egzamin',date:new Date().toLocaleDateString('pl-PL'),percent:pct,testId:onlineTestId,description:'Automatyczna ocena za test online'});
-  save();
- }
- onlineTestGraded=true;
- $('checkTest').disabled=true;
- items.forEach(item=>item.querySelectorAll('input').forEach(input=>input.disabled=true));
- $('testResult').textContent='🎯 Wynik: '+correct+' / '+onlineTest.length+' ('+pct+'%). Ocena: '+grade+'. 🟠 Automatycznie wpisano do dziennika ocen.';
- renderStudentGrades();
-};
-$('printTest').onclick=()=>{if(!$('testSheet').children.length){msg('Najpierw utwórz test.');return}printMode('print-test')};
 
-// Three forms of irregular verbs. Stored per student in this browser.
-const verbs=()=>state.verbs[user.login]||[];
-function countVerbs(){$('verbCount').textContent='Zapisane czasowniki: '+verbs().length+' / 100'}
-$('saveVerbs').onclick=()=>{const lines=$('verbInput').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(lines.length>100){msg('Maksymalnie 100 czasowników.');return}let parsed=[];for(const line of lines){const parts=line.split(/\s+[-–—]\s+/).map(x=>x.trim());if(parts.length!==4||parts.some(x=>!x)){msg('Popraw format: go - went - gone - iść (błędna linia: '+line+')');return}parsed.push({base:parts[0],past:parts[1],participle:parts[2],pl:parts[3]})}state.verbs[user.login]=parsed;save();countVerbs();msg('Zapisano trzy formy czasowników.')};
-let currentVerb=null;
-$('newVerbQuestion').onclick=()=>{const all=verbs();if(!all.length){msg('Najpierw zapisz czasowniki.');return}currentVerb=all[Math.floor(Math.random()*all.length)];$('verbPrompt').textContent='Podaj II i III formę: '+currentVerb.base+' ('+currentVerb.pl+')';$('verbPast').value='';$('verbParticiple').value='';$('verbFeedback').textContent=''};
-$('checkVerb').onclick=()=>{if(!currentVerb){msg('Kliknij „Nowe pytanie”.');return}const norm=s=>s.trim().toLocaleLowerCase('en');const correctPast=norm($('verbPast').value)===norm(currentVerb.past),correctThird=norm($('verbParticiple').value)===norm(currentVerb.participle);$('verbFeedback').textContent=correctPast&&correctThird?'✅ Obie formy poprawne!':'❌ Poprawnie: '+currentVerb.base+' – '+currentVerb.past+' – '+currentVerb.participle};
-$('makeVerbTest').onclick=()=>{const all=shuffled(verbs());if(!all.length){msg('Najpierw zapisz czasowniki.');return}const sheet=$('verbTestSheet');sheet.replaceChildren();const h=document.createElement('h2');h.textContent='WordClass – test trzech form czasowników';sheet.append(h);const p=document.createElement('p');p.textContent='Imię i nazwisko: _________________________   Data: __________';sheet.append(p);const table=document.createElement('table');const header=document.createElement('tr');['I forma','II forma','III forma','Znaczenie'].forEach(x=>{const th=document.createElement('th');th.textContent=x;header.append(th)});table.append(header);all.forEach(v=>{const tr=document.createElement('tr');[v.base,'________________','________________',v.pl].forEach(x=>{const td=document.createElement('td');td.textContent=x;tr.append(td)});table.append(tr)});sheet.append(table);msg('Test trzech form gotowy do wydruku lub zapisania jako PDF.')};
-$('printVerbTest').onclick=()=>{if(!$('verbTestSheet').children.length){msg('Najpierw utwórz test trzech form.');return}printMode('print-verbs')};
-
-// Gradebook DEMO: all records live in localStorage of this browser only.
-// Grade modifiers are numeric tenths: minus = -0.25, plus = +0.25, bounded 1..6.
-let editingGradeLogin=null;
-const gradeTypes={sprawdzian:'Sprawdzian',kartkowka:'Kartkówka',ustna:'Odpowiedź ustna',egzamin:'Egzamin na stronie'};
-const gradeValues=[];for(let n=1;n<=6;n++){if(n>1)gradeValues.push(n+'-');gradeValues.push(String(n));gradeValues.push(n+'+')}
-const gradeSelect=$('gradeValue');gradeValues.forEach(g=>{const opt=document.createElement('option');opt.value=g;opt.textContent=g;gradeSelect.append(opt)});
-function gradeNumber(v){const m=/^([1-6])([+-]?)$/.exec(v);if(!m)return NaN;return Math.max(1,Math.min(6,Number(m[1])+(m[2]==='+'?.25:m[2]==='-'?-.25:0)))}
-function gradeEntries(login){return state.grades[login]||[]}
-function averageText(login){const g=gradeEntries(login);if(!g.length)return 'brak ocen';return (g.reduce((sum,x)=>sum+gradeNumber(x.value),0)/g.length).toLocaleString('pl-PL',{minimumFractionDigits:2,maximumFractionDigits:2})}
-function gradePill(g){const span=document.createElement('span');span.className='grade-pill grade-'+g.type;span.textContent=g.value;span.title=(gradeTypes[g.type]||g.type)+' • '+(g.date||'');return span}
-function gradeGroup(g,withDelete=false,index=0){const row=document.createElement('div');row.className='grade-row';row.append(gradePill(g));const desc=document.createElement('span');desc.textContent=(gradeTypes[g.type]||g.type)+' • '+(g.date||'');row.append(desc);if(withDelete){const del=document.createElement('button');del.className='danger small-btn';del.textContent='Usuń ocenę';del.onclick=()=>{if(!confirm('Usunąć ocenę '+g.value+'?'))return;state.grades[editingGradeLogin].splice(index,1);save();renderGradeEditor();renderAccounts();renderAverageRequests()};row.append(del)}return row}
-function openGradeEditor(login){openAdminSection('adminGrades');editingGradeLogin=login;$('gradeEditor').classList.remove('hidden');renderGradeEditor();$('gradeEditor').scrollIntoView({behavior:'smooth',block:'nearest'})}
-function renderGradeEditor(){if(!editingGradeLogin)return;const a=state.accounts.find(x=>x.login===editingGradeLogin);if(!a){$('gradeEditor').classList.add('hidden');return}$('gradeStudentHeading').textContent='📊 Oceny: '+(a.first?a.first+' '+a.last+' ('+a.login+')':a.login);$('gradeAverageAdmin').textContent='Średnia ucznia: '+averageText(a.login)+' (oceny mają jednakową wagę)';const list=$('gradeListAdmin');list.replaceChildren();gradeEntries(a.login).forEach((g,i)=>list.append(gradeGroup(g,true,i)));if(!list.children.length)list.textContent='Brak ocen.';const req=state.averageRequests[a.login];const container=$('gradeRequestAdmin');container.replaceChildren();if(req?.status==='pending'){const p=document.createElement('p');p.textContent='📨 Uczeń prosi o dostęp do średniej na 24 godziny.';container.append(p);const ok=document.createElement('button');ok.textContent='Zatwierdź na 24 h';ok.onclick=()=>{state.averageRequests[a.login]={status:'approved',expiresAt:Date.now()+24*60*60*1000};save();renderGradeEditor();renderAccounts();renderAverageRequests()};const no=document.createElement('button');no.className='secondary';no.textContent='Odrzuć';no.onclick=()=>{state.averageRequests[a.login]={status:'rejected'};save();renderGradeEditor();renderAccounts();renderAverageRequests()};container.append(ok,no)}else if(req?.status==='approved'&&req.expiresAt>Date.now()){const p=document.createElement('p');p.textContent='✅ Dostęp do średniej aktywny do: '+new Date(req.expiresAt).toLocaleString('pl-PL');container.append(p)}}
-$('addGrade').onclick=()=>{if(!editingGradeLogin)return;const grade={value:$('gradeValue').value,type:$('gradeType').value,date:new Date().toLocaleDateString('pl-PL')};if(!Number.isFinite(gradeNumber(grade.value)))return;(state.grades[editingGradeLogin] ||= []).push(grade);save();renderGradeEditor();renderAccounts();renderAverageRequests();msg('Dodano ocenę '+grade.value+'.')};
-$('closeGrades').onclick=()=>{$('gradeEditor').classList.add('hidden');editingGradeLogin=null};
-function renderStudentGrades(){if(!user||user.admin)return;const list=$('studentGradeList');list.replaceChildren();const grades=gradeEntries(user.login);grades.forEach(g=>list.append(gradeGroup(g)));if(!grades.length)list.textContent='Nie masz jeszcze ocen.';const req=state.averageRequests[user.login];const active=req?.status==='approved'&&req.expiresAt>Date.now();$('studentAverage').textContent=active?'⭐ Twoja średnia: '+averageText(user.login)+' (dostęp do '+new Date(req.expiresAt).toLocaleString('pl-PL')+')':'🔒 Twoja średnia jest ukryta.';$('requestAverage').disabled=active||req?.status==='pending';$('requestStatus').textContent=active?'Dostęp wygasa automatycznie po 24 godzinach.':req?.status==='pending'?'Prośba oczekuje na decyzję nauczyciela.':req?.status==='rejected'?'Ostatnia prośba została odrzucona. Możesz wysłać kolejną.':''}
-$('requestAverage').onclick=()=>{if(!user||user.admin)return;const req=state.averageRequests[user.login];if(req?.status==='pending')return;state.averageRequests[user.login]={status:'pending',requestedAt:Date.now()};save();renderStudentGrades();msg('Wysłano prośbę do administratora (na tym urządzeniu).')};
-show('home');
-// DEMO ONLY: reset requests and codes are stored locally in this browser.
-// This is not secure authentication and does not sync between devices.
-$('showResetRequest').onclick=()=>{$('resetRequestForm').classList.toggle('hidden');$('resetCodeForm').classList.add('hidden')};
-$('showResetCode').onclick=()=>{$('resetCodeForm').classList.toggle('hidden');$('resetRequestForm').classList.add('hidden')};
-$('sendResetRequest').onclick=()=>{
- const login=$('resetRequestLogin').value.trim().toLowerCase();
- if(!state.accounts.some(a=>a.login===login)){msg('Nie znaleziono konta o takim loginie.');return}
- const old=state.passwordResets[login];
- if(old?.status==='pending'){msg('Prośba została już wysłana. Poczekaj na administratora.');return}
- state.passwordResets[login]={status:'pending',requestedAt:Date.now()};save();
- msg('Prośba zapisana. Poproś administratora o wygenerowanie i przekazanie kodu.');
-};
-function renderResetRequests(){
- const target=$('resetRequests');target.replaceChildren();
- const entries=Object.entries(state.passwordResets).filter(([login,r])=>state.accounts.some(a=>a.login===login)&&r.status==='pending');
- if(!entries.length){target.textContent='Brak nowych próśb o reset hasła.';return}
- entries.forEach(([login,r])=>{
-  const row=document.createElement('div');row.className='reset-request-row';
-  const name=document.createElement('strong');name.textContent='🎓 '+login+' prosi o reset hasła';
-  const btn=document.createElement('button');btn.textContent='Wygeneruj kod';
-  btn.onclick=()=>{
-   const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const bytes=new Uint32Array(8);crypto.getRandomValues(bytes);
-   const code=Array.from(bytes,x=>chars[x%chars.length]).join('');
-   state.passwordResets[login]={status:'issued',code,expiresAt:Date.now()+30*60*1000};save();
-   renderResetRequests();renderAccounts();
-   alert('Kod jednorazowy dla '+login+': '+code+'\n\nZapisz go i przekaż uczniowi. Kod jest ważny 30 minut i działa tylko raz.');
-  };
-  const cancel=document.createElement('button');cancel.className='secondary';cancel.textContent='Odrzuć';
-  cancel.onclick=()=>{delete state.passwordResets[login];save();renderResetRequests()};
-  row.append(name,btn,cancel);target.append(row);
- });
+function show(id) {
+  ['home', 'login', 'setup', 'admin', 'student'].forEach(name => {
+    const element = $(name);
+    if (element) element.classList.toggle('hidden', name !== id);
+  });
+  msg('');
 }
-$('redeemResetCode').onclick=()=>{
- const login=$('resetCodeLogin').value.trim().toLowerCase();
- const code=$('resetCodeValue').value.trim().toUpperCase();const pass=$('resetNewPassword').value;
- const account=state.accounts.find(a=>a.login===login);const req=state.passwordResets[login];
- if(!account||!req||req.status!=='issued'||req.code!==code||Date.now()>req.expiresAt){msg('Nieprawidłowy lub wygasły kod. Poproś administratora o nowy.');return}
- if(!pass||pass.length>10){msg('Nowe hasło musi mieć od 1 do 10 znaków.');return}
- account.password=pass;account.firstLogin=!account.first||!account.last;
- delete state.passwordResets[login];save();
- $('resetCodeValue').value='';$('resetNewPassword').value='';$('resetCodeForm').classList.add('hidden');
- msg('Hasło zostało zmienione. Zaloguj się nowym hasłem.');
+
+function notice(text) {
+  msg(text);
+  alert(text);
+}
+
+function unavailable() {
+  notice(
+    'Ta funkcja będzie dostępna po podłączeniu kont uczniów do Supabase.'
+  );
+}
+
+// ------------------------------------------
+// LOGOWANIE
+// ------------------------------------------
+
+function openLogin(role) {
+  loginRole = role;
+
+  $('loginHeading').textContent =
+    role === 'admin'
+      ? '👩‍🏫 Logowanie administratora'
+      : '🎓 Logowanie ucznia';
+
+  $('loginIcon').textContent =
+    role === 'admin' ? '👩‍🏫' : '🎓';
+
+  $('loginHelp').textContent =
+    role === 'admin'
+      ? 'Wpisz e-mail i hasło administratora z Supabase.'
+      : 'Logowanie uczniów uruchomimy w kolejnym etapie.';
+
+  $('demoHint').textContent =
+    role === 'admin'
+      ? 'Bezpieczne logowanie przez Supabase'
+      : 'Konta uczniów są jeszcze przygotowywane.';
+
+  $('loginName').value = '';
+  $('loginPass').value = '';
+
+  if ($('resetLoginArea')) {
+    $('resetLoginArea').classList.add('hidden');
+  }
+
+  if ($('resetRequestForm')) {
+    $('resetRequestForm').classList.add('hidden');
+  }
+
+  if ($('resetCodeForm')) {
+    $('resetCodeForm').classList.add('hidden');
+  }
+
+  show('login');
+  $('loginName').focus();
+}
+
+async function login() {
+  const email = $('loginName').value.trim();
+  const password = $('loginPass').value;
+
+  if (loginRole !== 'admin') {
+    msg('Logowanie uczniów uruchomimy w kolejnym etapie.');
+    return;
+  }
+
+  if (!db) {
+    msg('Brak połączenia z Supabase. Sprawdź plik index.html.');
+    return;
+  }
+
+  if (!email || !password) {
+    msg('Wpisz e-mail i hasło administratora.');
+    return;
+  }
+
+  if (!email.includes('@')) {
+    msg('Zamiast loginu admin wpisz swój e-mail z Supabase.');
+    return;
+  }
+
+  $('signIn').disabled = true;
+
+  try {
+    const { data, error } = await db.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error || !data.user) {
+      msg('Nieprawidłowy e-mail lub hasło.');
+      return;
+    }
+
+    const result = await db
+      .from('wordclass_profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single();
+
+    if (result.error || result.data?.role !== 'admin') {
+      await db.auth.signOut();
+      msg('To konto nie ma uprawnień administratora.');
+      return;
+    }
+
+    user = {
+      id: data.user.id,
+      admin: true
+    };
+
+    show('admin');
+    showAdminDashboard();
+    await loadClasses();
+
+  } catch (error) {
+    msg('Błąd logowania: ' + error.message);
+  } finally {
+    $('signIn').disabled = false;
+  }
+}
+
+async function logout() {
+  if (db) {
+    await db.auth.signOut();
+  }
+
+  user = null;
+  classes = [];
+  $('loginPass').value = '';
+  show('home');
+}
+
+$('goAdmin').onclick = () => openLogin('admin');
+$('goStudent').onclick = () => openLogin('student');
+$('backHome').onclick = () => show('home');
+$('signIn').onclick = login;
+
+$('loginPass').addEventListener('keydown', event => {
+  if (event.key === 'Enter') login();
+});
+
+document.querySelectorAll('.logout').forEach(button => {
+  button.onclick = logout;
+});
+
+// ------------------------------------------
+// KLASY — SUPABASE
+// ------------------------------------------
+
+async function loadClasses() {
+  if (!user?.admin) return;
+
+  const result = await db
+    .from('wordclass_classes')
+    .select('id,name')
+    .order('id', { ascending: true });
+
+  if (result.error) {
+    msg('Nie udało się pobrać klas: ' + result.error.message);
+    return;
+  }
+
+  classes = result.data || [];
+  renderClasses();
+}
+
+function renderClasses() {
+  $('classLimit').textContent = classes.length + ' / 10';
+
+  const list = $('classList');
+  list.replaceChildren();
+
+  classes.forEach(item => {
+    const box = document.createElement('div');
+    box.className = 'class-item';
+
+    const title = document.createElement('strong');
+    title.textContent = '🏫 ' + item.name;
+
+    const button = document.createElement('button');
+    button.className = 'danger';
+    button.textContent = 'Usuń klasę';
+
+    button.onclick = async () => {
+      if (!user?.admin) return;
+
+      const confirmed = confirm(
+        'Czy na pewno usunąć klasę ' + item.name + '?'
+      );
+
+      if (!confirmed) return;
+
+      button.disabled = true;
+
+      const result = await db
+        .from('wordclass_classes')
+        .delete()
+        .eq('id', item.id);
+
+      if (result.error) {
+        msg('Nie udało się usunąć klasy: ' + result.error.message);
+        button.disabled = false;
+        return;
+      }
+
+      await loadClasses();
+      msg('Usunięto klasę z Supabase.');
+    };
+
+    box.append(title, button);
+    list.append(box);
+  });
+
+  const generateClass = $('generateClass');
+  const filterClass = $('filterClass');
+
+  if (generateClass) {
+    generateClass.replaceChildren();
+
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'Bez klasy';
+    generateClass.append(empty);
+  }
+
+  if (filterClass) {
+    filterClass.replaceChildren();
+
+    const all = document.createElement('option');
+    all.value = 'all';
+    all.textContent = 'Wszystkie klasy';
+    filterClass.append(all);
+
+    const none = document.createElement('option');
+    none.value = 'none';
+    none.textContent = 'Bez klasy';
+    filterClass.append(none);
+  }
+
+  classes.forEach(item => {
+    for (const select of [generateClass, filterClass]) {
+      if (!select) continue;
+
+      const option = document.createElement('option');
+      option.value = String(item.id);
+      option.textContent = item.name;
+      select.append(option);
+    }
+  });
+}
+
+$('addClass').onclick = async () => {
+  if (!user?.admin) return;
+
+  const name = $('className').value.trim();
+
+  if (!name) {
+    msg('Wpisz nazwę klasy.');
+    return;
+  }
+
+  if (classes.length >= 10) {
+    msg('Można mieć maksymalnie 10 klas.');
+    return;
+  }
+
+  if (
+    classes.some(
+      item => item.name.toLowerCase() === name.toLowerCase()
+    )
+  ) {
+    msg('Klasa o tej nazwie już istnieje.');
+    return;
+  }
+
+  $('addClass').disabled = true;
+
+  try {
+    const result = await db
+      .from('wordclass_classes')
+      .insert({ name });
+
+    if (result.error) {
+      msg('Nie udało się dodać klasy: ' + result.error.message);
+      return;
+    }
+
+    $('className').value = '';
+
+    await loadClasses();
+
+    msg('Dodano klasę ' + name + ' do Supabase.');
+
+  } finally {
+    $('addClass').disabled = false;
+  }
 };
 
+// ------------------------------------------
+// KOLOROWE KAFELKI ADMINISTRATORA
+// ------------------------------------------
 
-// Kafelkowe menu administratora i ucznia, z przyciskiem powrotu.
-(function buildDashboards(){
-  const admin=$('admin');
-  const top=admin.querySelector('.top');
-  const blocks=[
-    {id:'adminClasses',icon:'🏫',title:'Moje klasy',desc:'Twórz i usuwaj klasy',start:admin.querySelector('.class-manager'),end:admin.querySelector('.class-manager')},
-    {id:'adminAccounts',icon:'👥',title:'Konta uczniów',desc:'Generuj loginy, hasła i PDF',start:[...admin.children].find(e=>e.tagName==='H3'&&e.textContent.includes('Konta uczniów')),end:admin.querySelector('#printAccounts')},
-    {id:'adminResets',icon:'🔑',title:'Reset haseł',desc:'Prośby i jednorazowe kody',start:admin.querySelector('.reset-admin'),end:admin.querySelector('.reset-admin')},
-    {id:'adminGrades',icon:'📊',title:'Oceny uczniów',desc:'Oceny i średnie',start:[...admin.children].find(e=>e.tagName==='H3'&&e.textContent.includes('Dziennik ocen')),end:admin.querySelector('#gradeEditor')}
+function buildAdminDashboard() {
+  const admin = $('admin');
+  const top = admin.querySelector('.top');
+
+  const dashboard = document.createElement('div');
+  dashboard.id = 'adminTiles';
+  dashboard.className = 'dashboard-tiles';
+
+  const back = document.createElement('button');
+  back.id = 'adminBack';
+  back.type = 'button';
+  back.className = 'secondary dashboard-back hidden';
+  back.textContent = '← Wróć do kafelków';
+  back.onclick = showAdminDashboard;
+
+  top.after(dashboard, back);
+
+  const blocks = [
+    {
+      id: 'adminClasses',
+      icon: '🏫',
+      title: 'Moje klasy',
+      desc: 'Twórz i usuwaj klasy',
+      start: admin.querySelector('.class-manager'),
+      end: admin.querySelector('.class-manager'),
+      enabled: true
+    },
+    {
+      id: 'adminAccounts',
+      icon: '👥',
+      title: 'Konta uczniów',
+      desc: 'Wkrótce: konta i hasła',
+      start: [...admin.children].find(
+        element =>
+          element.tagName === 'H3' &&
+          element.textContent.includes('Konta uczniów')
+      ),
+      end: admin.querySelector('#printAccounts'),
+      enabled: false
+    },
+    {
+      id: 'adminResets',
+      icon: '🔑',
+      title: 'Reset haseł',
+      desc: 'Wkrótce: bezpieczne kody',
+      start: admin.querySelector('.reset-admin'),
+      end: admin.querySelector('.reset-admin'),
+      enabled: false
+    },
+    {
+      id: 'adminGrades',
+      icon: '📊',
+      title: 'Oceny uczniów',
+      desc: 'Wkrótce: dziennik online',
+      start: [...admin.children].find(
+        element =>
+          element.tagName === 'H3' &&
+          element.textContent.includes('Dziennik ocen')
+      ),
+      end: admin.querySelector('#gradeEditor'),
+      enabled: false
+    }
   ];
-  const dashboard=document.createElement('div');dashboard.id='adminTiles';dashboard.className='dashboard-tiles';
-  const back=document.createElement('button');back.id='adminBack';back.className='secondary dashboard-back hidden';back.textContent='← Wróć do kafelków';back.type='button';back.onclick=showAdminDashboard;
-  top.after(dashboard,back);
-  blocks.forEach(b=>{
-    if(!b.start||!b.end)return;
-    const panel=document.createElement('div');panel.id=b.id;panel.className='dashboard-section hidden';
-    let node=b.start;
-    while(node){const next=node.nextElementSibling;panel.append(node);if(node===b.end)break;node=next}
+
+  blocks.forEach(block => {
+    if (!block.start || !block.end) return;
+
+    const panel = document.createElement('div');
+    panel.id = block.id;
+    panel.className = 'dashboard-section hidden';
+
+    let node = block.start;
+
+    while (node) {
+      const next = node.nextElementSibling;
+      panel.append(node);
+
+      if (node === block.end) break;
+
+      node = next;
+    }
+
     admin.append(panel);
-    const tile=document.createElement('button');tile.type='button';tile.className='dashboard-tile';
-    tile.innerHTML='<span class="tile-icon">'+b.icon+'</span><strong>'+b.title+'</strong><small>'+b.desc+'</small><span class="tile-arrow">Otwórz →</span>';
-    tile.onclick=()=>openAdminSection(b.id);
+
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'dashboard-tile';
+
+    const icon = document.createElement('span');
+    icon.className = 'tile-icon';
+    icon.textContent = block.icon;
+
+    const title = document.createElement('strong');
+    title.textContent = block.title;
+
+    const description = document.createElement('small');
+    description.textContent = block.desc;
+
+    const arrow = document.createElement('span');
+    arrow.className = 'tile-arrow';
+    arrow.textContent = 'Otwórz →';
+
+    tile.append(icon, title, description, arrow);
+
+    tile.onclick = () => {
+      if (block.enabled) {
+        openAdminSection(block.id);
+      } else {
+        unavailable();
+      }
+    };
+
     dashboard.append(tile);
   });
-  // Oddzielny kafelek i ekran do akceptowania próśb o średnią.
-  const approvals=document.createElement('div');approvals.id='adminApprovals';approvals.className='dashboard-section hidden';admin.append(approvals);
-  const approvalsTile=document.createElement('button');approvalsTile.type='button';approvalsTile.id='approvalsTile';approvalsTile.className='dashboard-tile';
-  approvalsTile.innerHTML='<span class="tile-icon">📨</span><strong>Akceptacja średniej</strong><small id="approvalsTileDescription">Prośby uczniów o dostęp na 24 godziny</small><span class="tile-arrow">Otwórz →</span>';
-  approvalsTile.onclick=()=>openAdminSection('adminApprovals');dashboard.append(approvalsTile);
-  const student=$('student');const studentTop=student.querySelector('.top');const tiles=student.querySelector('nav');tiles.id='studentTiles';tiles.classList.add('dashboard-tiles');
-  const names={notes:['📒','Mój notes','Zapisuj słówka'],practice:['🎯','Ćwiczenia','Trenuj tłumaczenia'],test:['📝','Testy i PDF','Sprawdź wiedzę'],verbs:['🔤','3 formy czasowników','Ćwicz czasowniki'],grades:['📊','Moje oceny','Zobacz oceny']};
-  tiles.querySelectorAll('[data-tab]').forEach(btn=>{const [icon,title,desc]=names[btn.dataset.tab];btn.className='dashboard-tile';btn.innerHTML='<span class="tile-icon">'+icon+'</span><strong>'+title+'</strong><small>'+desc+'</small><span class="tile-arrow">Otwórz →</span>'});
-  const studentBack=document.createElement('button');studentBack.id='studentBack';studentBack.type='button';studentBack.className='secondary dashboard-back hidden';studentBack.textContent='← Wróć do kafelków';studentBack.onclick=showStudentDashboard;studentTop.after(studentBack);
-})();
-function showAdminDashboard(){
-  renderAverageRequests();
-  $('adminTiles').classList.remove('hidden');$('adminBack').classList.add('hidden');
-  ['adminClasses','adminAccounts','adminResets','adminGrades','adminApprovals'].forEach(id=>$(id)?.classList.add('hidden'));
-  window.scrollTo({top:0,behavior:'smooth'});
-}
-function showStudentDashboard(){
-  $('studentTiles').classList.remove('hidden');$('studentBack').classList.add('hidden');
-  ['notes','practice','test','verbs','grades'].forEach(id=>$(id).classList.add('hidden'));
-  window.scrollTo({top:0,behavior:'smooth'});
+
+  const approvals = document.createElement('button');
+  approvals.type = 'button';
+  approvals.className = 'dashboard-tile';
+
+  approvals.innerHTML =
+    '<span class="tile-icon">📨</span>' +
+    '<strong>Akceptacja średniej</strong>' +
+    '<small>Wkrótce: prośby uczniów</small>' +
+    '<span class="tile-arrow">Otwórz →</span>';
+
+  approvals.onclick = unavailable;
+  dashboard.append(approvals);
 }
 
-// Lista kont musi być w kafelku „Konta uczniów”, a nie w „Ocenach”.
-(function fixAccountPanel(){
- const accountsPanel=$('adminAccounts');
- const table=$('accounts')?.closest('.tableWrap');
- if(accountsPanel&&table){
-   const heading=document.createElement('h3');heading.textContent='📋 Wygenerowane konta uczniów';
-   accountsPanel.append(heading,table);
- }
-})();
+function showAdminDashboard() {
+  $('adminTiles').classList.remove('hidden');
+  $('adminBack').classList.add('hidden');
 
-// Stała lista próśb i ocen w panelu nauczyciela.
-(function setupGradeDashboard(){
- const panel=$('adminGrades');
- if(!panel)return;
- const pending=document.createElement('div');pending.id='averageRequestInbox';pending.className='grade-editor';
- const heading=document.createElement('h3');heading.textContent='📨 Prośby uczniów o pokazanie średniej';
- const list=document.createElement('div');list.id='averageRequestList';pending.append(heading,list);
- $('adminApprovals').append(pending);
- const heading2=document.createElement('h3');heading2.textContent='👥 Wybierz ucznia, aby zobaczyć oceny i średnią';
- const studentList=document.createElement('div');studentList.id='gradeStudentPicker';
- panel.insertBefore(studentList,$('gradeEditor'));panel.insertBefore(heading2,studentList);
-})();
-function openAdminSection(id){
- $('adminTiles').classList.add('hidden');$('adminBack').classList.remove('hidden');
- ['adminClasses','adminAccounts','adminResets','adminGrades','adminApprovals'].forEach(x=>$(x)?.classList.toggle('hidden',x!==id));
- if(id==='adminGrades'||id==='adminApprovals')renderAverageRequests();
- window.scrollTo({top:0,behavior:'smooth'});
+  [
+    'adminClasses',
+    'adminAccounts',
+    'adminResets',
+    'adminGrades'
+  ].forEach(id => {
+    if ($(id)) $(id).classList.add('hidden');
+  });
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
-function renderAverageRequests(){
- const inbox=$('averageRequestList'),picker=$('gradeStudentPicker');
- if(!inbox||!picker)return;
- inbox.replaceChildren();picker.replaceChildren();
- const pending=state.accounts.filter(a=>state.averageRequests[a.login]?.status==='pending');
- const countLabel=$('approvalsTileDescription');if(countLabel)countLabel.textContent=pending.length?('🔔 Nowe prośby: '+pending.length):'Prośby uczniów o dostęp na 24 godziny';
- if(!pending.length){const p=document.createElement('p');p.className='muted';p.textContent='Brak nowych próśb.';inbox.append(p)}
- pending.forEach(a=>{
-  const row=document.createElement('div');row.className='grade-row';
-  const label=document.createElement('strong');label.textContent='📨 '+(a.first?[a.first,a.last].filter(Boolean).join(' '):a.login)+' ('+a.login+')';row.append(label);
-  const yes=document.createElement('button');yes.textContent='✅ Akceptuj na 24 h';
-  yes.onclick=()=>{state.averageRequests[a.login]={status:'approved',expiresAt:Date.now()+86400000};save();renderAverageRequests();renderAccounts();if(editingGradeLogin===a.login)renderGradeEditor()};
-  const no=document.createElement('button');no.className='secondary';no.textContent='Odrzuć';
-  no.onclick=()=>{state.averageRequests[a.login]={status:'rejected'};save();renderAverageRequests();renderAccounts();if(editingGradeLogin===a.login)renderGradeEditor()};
-  row.append(yes,no);inbox.append(row)
- });
- state.accounts.forEach(a=>{
-  const row=document.createElement('div');row.className='grade-row';
-  const label=document.createElement('span');label.textContent=(a.first?[a.first,a.last].filter(Boolean).join(' '):a.login)+' ('+a.login+') — '+className(a.classId)+' — Średnia: '+averageText(a.login);
-  const btn=document.createElement('button');btn.className='secondary';btn.textContent='📊 Pokaż oceny';btn.onclick=()=>openGradeEditor(a.login);
-  row.append(label,btn);picker.append(row)
- });
- if(!state.accounts.length)picker.textContent='Nie ma jeszcze uczniów.';
+
+function openAdminSection(id) {
+  $('adminTiles').classList.add('hidden');
+  $('adminBack').classList.remove('hidden');
+
+  [
+    'adminClasses',
+    'adminAccounts',
+    'adminResets',
+    'adminGrades'
+  ].forEach(name => {
+    if ($(name)) {
+      $(name).classList.toggle('hidden', name !== id);
+    }
+  });
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+// ------------------------------------------
+// FUNKCJE UCZNIÓW — KOLEJNY ETAP
+// ------------------------------------------
+
+function buildStudentDashboard() {
+  const student = $('student');
+  const top = student.querySelector('.top');
+  const tiles = student.querySelector('nav');
+
+  if (!tiles) return;
+
+  tiles.id = 'studentTiles';
+  tiles.classList.add('dashboard-tiles');
+
+  const names = {
+    notes: ['📒', 'Mój notes', 'Zapisuj słówka'],
+    practice: ['🎯', 'Ćwiczenia', 'Trenuj tłumaczenia'],
+    test: ['📝', 'Testy i PDF', 'Sprawdź wiedzę'],
+    verbs: ['🔤', '3 formy czasowników', 'Ćwicz czasowniki'],
+    grades: ['📊', 'Moje oceny', 'Zobacz oceny']
+  };
+
+  tiles.querySelectorAll('[data-tab]').forEach(button => {
+    const info = names[button.dataset.tab];
+    if (!info) return;
+
+    button.className = 'dashboard-tile';
+    button.innerHTML =
+      '<span class="tile-icon">' + info[0] + '</span>' +
+      '<strong>' + info[1] + '</strong>' +
+      '<small>' + info[2] + '</small>' +
+      '<span class="tile-arrow">Otwórz →</span>';
+
+    button.onclick = unavailable;
+  });
+
+  const back = document.createElement('button');
+  back.id = 'studentBack';
+  back.type = 'button';
+  back.className = 'secondary dashboard-back hidden';
+  back.textContent = '← Wróć do kafelków';
+
+  top.after(back);
+}
+
+// Nie zapisujemy kont ani ocen uczniów w localStorage.
+
+[
+  'finishSetup',
+  'generate',
+  'deleteAllAccounts',
+  'printAccounts',
+  'addGrade',
+  'requestAverage',
+  'sendResetRequest',
+  'redeemResetCode',
+  'saveWords',
+  'saveVerbs',
+  'makeTest',
+  'checkTest',
+  'nextQuestion',
+  'newVerbQuestion',
+  'checkVerb',
+  'makeVerbTest',
+  'printVerbTest',
+  'printTest',
+  'showResetRequest',
+  'showResetCode'
+].forEach(id => {
+  if ($(id)) $(id).onclick = unavailable;
+});
+
+// ------------------------------------------
+// START STRONY
+// ------------------------------------------
+
+buildAdminDashboard();
+buildStudentDashboard();
+
+show('home');
