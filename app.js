@@ -365,7 +365,7 @@ function buildAdminDashboard() {
           element.textContent.includes('Konta uczniów')
       ),
       end: admin.querySelector('#printAccounts'),
-      enabled: false
+      enabled: true
     },
     {
       id: 'adminResets',
@@ -539,7 +539,6 @@ function buildStudentDashboard() {
 
 [
   'finishSetup',
-  'generate',
   'deleteAllAccounts',
   'printAccounts',
   'addGrade',
@@ -570,3 +569,77 @@ buildAdminDashboard();
 buildStudentDashboard();
 
 show('home');
+
+$('generate').onclick = async () => {
+  if (!user?.admin) {
+    notice('Zaloguj się jako administrator.');
+    return;
+  }
+
+  const count = Number($('count').value);
+  const classValue = $('generateClass')?.value;
+  const classId = classValue ? Number(classValue) : null;
+
+  if (!Number.isInteger(count) || count < 1 || count > 50) {
+    notice('Podaj liczbę uczniów od 1 do 50.');
+    return;
+  }
+
+  const button = $('generate');
+  button.disabled = true;
+
+  try {
+    const { data: sessionData } = await db.auth.getSession();
+    const token = sessionData.session?.access_token;
+
+    if (!token) {
+      notice('Sesja wygasła. Zaloguj się ponownie.');
+      return;
+    }
+
+    const response = await fetch(
+      'https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/wordclass-create-students',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': 'sb_publishable_lT_I31LEre8X0h3H5hAWtw_54mud94_',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ count, classId })
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      notice(result.error || 'Nie udało się utworzyć kont.');
+      return;
+    }
+
+    const accounts = result.created || [];
+
+    const output = accounts.map(
+      item => item.login + ' — ' + item.password
+    ).join('\n');
+
+    notice('Utworzono ' + accounts.length + ' kont uczniów.');
+
+    if (output) {
+      const windowRef = window.open('', '_blank');
+
+      if (windowRef) {
+        const pre = windowRef.document.createElement('pre');
+        pre.textContent = output;
+        windowRef.document.body.append(pre);
+      } else {
+        alert(output);
+      }
+    }
+  } catch (error) {
+    notice('Błąd połączenia: ' + error.message);
+  } finally {
+    button.disabled = false;
+  }
+};
+
