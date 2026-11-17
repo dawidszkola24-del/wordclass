@@ -617,24 +617,20 @@ $('generate').onclick = async () => {
     }
 
     const accounts = result.created || [];
+    const wybranaKlasa = classes.find(
+  item => item.id === classId
+);
 
-    const output = accounts.map(
-      item => item.login + ' — ' + item.password
-    ).join('\n');
+const nazwaKlasy = wybranaKlasa
+  ? wybranaKlasa.name
+  : 'Bez klasy';
 
+pokazTabeleKont(accounts, nazwaKlasy);
+
+   
     notice('Utworzono ' + accounts.length + ' kont uczniów.');
 
-    if (output) {
-      const windowRef = window.open('', '_blank');
-
-      if (windowRef) {
-        const pre = windowRef.document.createElement('pre');
-        pre.textContent = output;
-        windowRef.document.body.append(pre);
-      } else {
-        alert(output);
-      }
-    }
+   
   } catch (error) {
     notice('Błąd połączenia: ' + error.message);
   } finally {
@@ -644,3 +640,111 @@ $('generate').onclick = async () => {
 $('printAccounts').onclick = () => {
   window.print();
 };
+// Przygotowanie estetycznej tabeli do drukowania kont uczniów.
+function pokazTabeleKont(konta, nazwaKlasy) {
+  if (!konta || konta.length === 0) return;
+
+  const okno = window.open('', '_blank');
+
+  if (!okno) {
+    alert('Przeglądarka zablokowała okno wydruku. Zezwól na wyskakujące okna.');
+    return;
+  }
+
+  const dokument = okno.document;
+
+  dokument.title = 'WordClass - konta uczniów';
+
+  const styl = dokument.createElement('style');
+  styl.textContent = `
+    body {
+      font-family: Arial, sans-serif;
+      margin: 35px;
+      color: #253047;
+    }
+    h1 {
+      color: #5645c7;
+      margin-bottom: 5px;
+    }
+    h2 {
+      color: #344054;
+      font-size: 18px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 25px;
+    }
+    th {
+      background: #5645c7;
+      color: white;
+      padding: 12px;
+      text-align: left;
+    }
+    td {
+      border: 1px solid #d9dce5;
+      padding: 12px;
+    }
+    tr:nth-child(even) {
+      background: #f2f0ff;
+    }
+    button {
+      background: #5645c7;
+      color: white;
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 20px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    @media print {
+      button { display: none; }
+      body { margin: 12mm; }
+      th {
+        background: #5645c7 !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+    }
+  `;
+  dokument.head.append(styl);
+
+  const tytul = dokument.createElement('h1');
+  tytul.textContent = '🎓 WordClass';
+
+  const podtytul = dokument.createElement('h2');
+  podtytul.textContent = 'Konta uczniów — ' + nazwaKlasy;
+
+  const tabela = dokument.createElement('table');
+  const naglowek = dokument.createElement('tr');
+
+  ['Lp.', 'Login ucznia', 'Hasło'].forEach(nazwa => {
+    const th = dokument.createElement('th');
+    th.textContent = nazwa;
+    naglowek.append(th);
+  });
+
+  tabela.append(naglowek);
+
+  konta.forEach((konto, indeks) => {
+    const wiersz = dokument.createElement('tr');
+
+    [
+      String(indeks + 1),
+      konto.login,
+      konto.password
+    ].forEach(wartosc => {
+      const td = dokument.createElement('td');
+      td.textContent = wartosc || '';
+      wiersz.append(td);
+    });
+
+    tabela.append(wiersz);
+  });
+
+  const drukuj = dokument.createElement('button');
+  drukuj.textContent = '🖨️ Drukuj tabelę';
+  drukuj.onclick = () => okno.print();
+
+  dokument.body.append(tytul, podtytul, tabela, drukuj);
+}
