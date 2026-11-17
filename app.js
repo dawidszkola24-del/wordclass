@@ -55,12 +55,12 @@ function openLogin(role) {
   $('loginHelp').textContent =
     role === 'admin'
       ? 'Wpisz e-mail i hasło administratora z Supabase.'
-      : 'Logowanie uczniów uruchomimy w kolejnym etapie.';
+      : 'Wpisz login ucznia i hasło.';
 
   $('demoHint').textContent =
     role === 'admin'
       ? 'Bezpieczne logowanie przez Supabase'
-      : 'Konta uczniów są jeszcze przygotowywane.';
+      : 'Bezpieczne logowanie przez Supabase';
 
   $('loginName').value = '';
   $('loginPass').value = '';
@@ -85,10 +85,6 @@ async function login() {
   const email = $('loginName').value.trim();
   const password = $('loginPass').value;
 
-  if (loginRole !== 'admin') {
-    msg('Logowanie uczniów uruchomimy w kolejnym etapie.');
-    return;
-  }
 
   if (!db) {
     msg('Brak połączenia z Supabase. Sprawdź plik index.html.');
@@ -100,8 +96,8 @@ async function login() {
     return;
   }
 
-  if (!email.includes('@')) {
-    msg('Zamiast loginu admin wpisz swój e-mail z Supabase.');
+  if (loginRole === 'admin' && !email.includes('@')) {
+    msg('Administrator wpisuje e-mail z Supabase.');
     return;
   }
 
@@ -109,7 +105,7 @@ async function login() {
 
   try {
     const { data, error } = await db.auth.signInWithPassword({
-      email,
+      email: loginRole === 'student' ? email.toLowerCase() + '@students.wordclass.invalid' : email,
       password
     });
 
@@ -120,24 +116,35 @@ async function login() {
 
     const result = await db
       .from('wordclass_profiles')
-      .select('role')
+      .select('role,login,full_name,class_id')
       .eq('id', data.user.id)
       .single();
 
-    if (result.error || result.data?.role !== 'admin') {
+    if (result.error || result.data?.role !== loginRole) {
       await db.auth.signOut();
-      msg('To konto nie ma uprawnień administratora.');
+      msg('To konto nie ma uprawnień dla wybranej roli.');
       return;
     }
 
     user = {
       id: data.user.id,
-      admin: true
+      admin: loginRole === 'admin',
+      login: result.data.login || email,
+      full_name: result.data.full_name || '',
+      class_id: result.data.class_id
     };
 
-    show('admin');
-    showAdminDashboard();
-    await loadClasses();
+    if (user.admin) {
+      show('admin');
+      showAdminDashboard();
+      await loadClasses();
+      await wcLoadStudents();
+    } else {
+      show('student');
+      $('studentTitle').textContent = '🎓 ' + (user.full_name || user.login);
+      wcStudentDashboard();
+      await wcLoadStudentData();
+    }
 
   } catch (error) {
     msg('Błąd logowania: ' + error.message);
@@ -374,7 +381,7 @@ function buildAdminDashboard() {
       desc: 'Wkrótce: bezpieczne kody',
       start: admin.querySelector('.reset-admin'),
       end: admin.querySelector('.reset-admin'),
-      enabled: false
+      enabled: true
     },
     {
       id: 'adminGrades',
@@ -387,7 +394,7 @@ function buildAdminDashboard() {
           element.textContent.includes('Dziennik ocen')
       ),
       end: admin.querySelector('#gradeEditor'),
-      enabled: false
+      enabled: true
     }
   ];
 
@@ -432,11 +439,9 @@ function buildAdminDashboard() {
     tile.append(icon, title, description, arrow);
 
     tile.onclick = () => {
-      if (block.enabled) {
-        openAdminSection(block.id);
-      } else {
-        unavailable();
-      }
+      openAdminSection(block.id);
+      if (block.id === 'adminGrades') wcLoadStudents();
+      if (block.id === 'adminResets') wcShowResetInfo();
     };
 
     dashboard.append(tile);
@@ -452,7 +457,7 @@ function buildAdminDashboard() {
     '<small>Wkrótce: prośby uczniów</small>' +
     '<span class="tile-arrow">Otwórz →</span>';
 
-  approvals.onclick = unavailable;
+  approvals.onclick = () => { openAdminSection('adminGrades'); wcLoadStudents(); }; 
   dashboard.append(approvals);
 }
 
@@ -523,7 +528,7 @@ function buildStudentDashboard() {
       '<small>' + info[2] + '</small>' +
       '<span class="tile-arrow">Otwórz →</span>';
 
-    button.onclick = unavailable;
+    button.onclick = () => wcOpenStudentTab(button.dataset.tab);
   });
 
   const back = document.createElement('button');
@@ -533,32 +538,10 @@ function buildStudentDashboard() {
   back.textContent = '← Wróć do kafelków';
 
   top.after(back);
+  back.onclick = wcStudentDashboard;
 }
 
 // Nie zapisujemy kont ani ocen uczniów w localStorage.
-
-[
-  'finishSetup',
-  'deleteAllAccounts',
-  'addGrade',
-  'requestAverage',
-  'sendResetRequest',
-  'redeemResetCode',
-  'saveWords',
-  'saveVerbs',
-  'makeTest',
-  'checkTest',
-  'nextQuestion',
-  'newVerbQuestion',
-  'checkVerb',
-  'makeVerbTest',
-  'printVerbTest',
-  'printTest',
-  'showResetRequest',
-  'showResetCode'
-].forEach(id => {
-  if ($(id)) $(id).onclick = unavailable;
-});
 
 // ------------------------------------------
 // START STRONY
@@ -628,6 +611,8 @@ const nazwaKlasy = wybranaKlasa
 pokazTabeleKont(accounts, nazwaKlasy);
 
    
+    wcLastPrint = {accounts, name: nazwaKlasy};
+    await wcLoadStudents();
     notice('Utworzono ' + accounts.length + ' kont uczniów.');
 
    
@@ -638,7 +623,8 @@ pokazTabeleKont(accounts, nazwaKlasy);
   }
 };
 $('printAccounts').onclick = () => {
-  window.print();
+  if (!wcLastPrint) return notice('Hasła są widoczne tylko przy tworzeniu kont. Wygeneruj nowe konta i od razu zapisz tabelkę.');
+  pokazTabeleKont(wcLastPrint.accounts, wcLastPrint.name);
 };
 // Przygotowanie estetycznej tabeli do drukowania kont uczniów.
 function pokazTabeleKont(konta, nazwaKlasy) {
@@ -748,3 +734,219 @@ function pokazTabeleKont(konta, nazwaKlasy) {
 
   dokument.body.append(tytul, podtytul, tabela, drukuj);
 }
+
+
+// WordClass: funkcje ucznia, dziennik, testy A–G.
+// Hasła nie są zapisywane w przeglądarce.
+let wcLastPrint = null;
+let wcStudents = [];
+let wcGradeStudent = null;
+let wcWords = [];
+let wcVerbs = [];
+let wcQuestion = null;
+let wcVerbQuestion = null;
+let wcTest = [];
+let wcTestGroup = null;
+const wcGroups = 'ABCDEFG';
+const wcNorm = v => String(v || '').trim().toLocaleLowerCase('pl');
+const wcShuffle = list => [...list].sort(() => Math.random() - 0.5);
+const wcEl = (tag, text) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = String(text); return el; };
+function wcStudentDashboard() {
+  $('studentTiles')?.classList.remove('hidden');
+  $('studentBack')?.classList.add('hidden');
+  document.querySelectorAll('#student .tab').forEach(el => el.classList.add('hidden'));
+}
+function wcOpenStudentTab(name) {
+  $('studentTiles')?.classList.add('hidden');
+  $('studentBack')?.classList.remove('hidden');
+  document.querySelectorAll('#student .tab').forEach(el => el.classList.toggle('hidden', el.id !== name));
+  if (name === 'grades') wcLoadOwnGrades();
+}
+async function wcLoadStudentData() {
+  for (const [table, setter, input, count] of [
+    ['wordclass_words', v => wcWords = v, 'wordInput', 'wordCount'],
+    ['wordclass_verbs', v => wcVerbs = v, 'verbInput', 'verbCount']
+  ]) {
+    const {data, error} = await db.from(table).select('content').eq('student_id',user.id).maybeSingle();
+    if (error) { msg('Brakuje tabeli Supabase ' + table + '. Wgraj dołączony plik SQL.'); continue; }
+    const raw = data?.content || '';
+    $(input).value = raw;
+    setter(wcParse(raw, table === 'wordclass_verbs' ? 4 : 2));
+    $(count).textContent = 'Zapisano: ' + (table === 'wordclass_verbs' ? wcVerbs.length : wcWords.length) + '/100';
+  }
+}
+function wcParse(raw, count) {
+  return raw.split(/\r?\n/).map(line => line.split(/\s+-\s+/).map(x=>x.trim())).filter(parts => parts.length === count && parts.every(Boolean)).slice(0,100);
+}
+async function wcSave(table, input, count, kind) {
+  if (!user || user.admin) return;
+  const raw = $(input).value.trim();
+  const rows = wcParse(raw, kind);
+  if (raw && !rows.length) return notice('Popraw format: każda linia ma mieć ' + kind + ' części oddzielone znakiem - .');
+  const {error} = await db.from(table).upsert({student_id:user.id,content:raw},{onConflict:'student_id'});
+  if (error) return notice('Nie zapisano: ' + error.message + '. Sprawdź SQL.');
+  if (kind===2) wcWords=rows; else wcVerbs=rows;
+  $(count).textContent='Zapisano: '+rows.length+'/100';
+  msg('Zapisano w Supabase.');
+}
+$('saveWords').onclick = () => wcSave('wordclass_words','wordInput','wordCount',2);
+$('saveVerbs').onclick = () => wcSave('wordclass_verbs','verbInput','verbCount',4);
+function wcNextQuestion() {
+  if (!wcWords.length) return notice('Najpierw zapisz słówka w notesie.');
+  const pair = wcWords[Math.floor(Math.random()*wcWords.length)];
+  const reverse = $('direction').value === 'plen';
+  wcQuestion = reverse ? [pair[1],pair[0]] : [pair[0],pair[1]];
+  $('question').textContent='Przetłumacz: '+wcQuestion[0];
+  const area=$('answers'); area.replaceChildren();
+  const input=wcEl('input'); input.placeholder='Twoja odpowiedź';
+  const check=wcEl('button','Sprawdź');
+  check.onclick=()=> $('feedback').textContent = wcNorm(input.value)===wcNorm(wcQuestion[1]) ? '✅ Dobrze!' : '❌ Poprawnie: '+wcQuestion[1];
+  area.append(input,check); $('feedback').textContent='';
+}
+$('nextQuestion').onclick=wcNextQuestion;
+$('newVerbQuestion').onclick=()=>{
+  if(!wcVerbs.length)return notice('Najpierw zapisz czasowniki.');
+  wcVerbQuestion=wcVerbs[Math.floor(Math.random()*wcVerbs.length)];
+  $('verbPrompt').textContent=wcVerbQuestion[0]+' — '+wcVerbQuestion[3];
+  $('verbPast').value=''; $('verbParticiple').value=''; $('verbFeedback').textContent='';
+};
+$('checkVerb').onclick=()=>{
+  if(!wcVerbQuestion)return notice('Najpierw kliknij Nowe pytanie.');
+  const good=wcNorm($('verbPast').value)===wcNorm(wcVerbQuestion[1]) && wcNorm($('verbParticiple').value)===wcNorm(wcVerbQuestion[2]);
+  $('verbFeedback').textContent=good?'✅ Dobrze!':'❌ Poprawnie: '+wcVerbQuestion[1]+' — '+wcVerbQuestion[2];
+};
+function wcTestStart() {
+  if (!wcWords.length) return notice('Najpierw zapisz słówka.');
+  wcTestGroup = wcGroups[Math.floor(Math.random()*7)];
+  const amount=$('testCount').value==='all'?wcWords.length:Number($('testCount').value);
+  const shuffled=wcShuffle(wcWords).slice(0,amount);
+  const direction=$('testDirection').value;
+  const mode=$('testMode').value;
+  wcTest=shuffled.map(pair=>{
+    const reverse=direction==='plen'||(direction==='mixed'&&Math.random()<0.5);
+    return {question:reverse?pair[1]:pair[0],answer:reverse?pair[0]:pair[1],mode};
+  });
+  const sheet=$('testSheet'); sheet.replaceChildren();
+  sheet.append(wcEl('h3','🎲 Grupa '+wcTestGroup));
+  wcTest.forEach((item,i)=>{
+    const wrap=wcEl('div'); wrap.style.margin='14px 0';
+    wrap.append(wcEl('strong',(i+1)+'. '+item.question));
+    if(mode==='open'){
+      const inp=wcEl('input'); inp.dataset.question=String(i); inp.placeholder='Wpisz odpowiedź';wrap.append(inp);
+    }else{
+      const select=wcEl('select');select.dataset.question=String(i);
+      select.append(wcEl('option','Wybierz odpowiedź'));
+      const choices=wcShuffle([item.answer,...wcShuffle(wcWords.map(p=>p[0]).concat(wcWords.map(p=>p[1])).filter(v=>wcNorm(v)!==wcNorm(item.answer))).slice(0,3)]);
+      choices.forEach(choice=>{const option=wcEl('option',choice);option.value=choice;select.append(option);});
+      wrap.append(select);
+    }
+    sheet.append(wrap);
+  });
+  $('checkTest').disabled=false; $('testResult').textContent='';
+}
+$('makeTest').onclick=wcTestStart;
+$('checkTest').onclick=async()=>{
+  if(!wcTest.length)return;
+  let points=0;
+  wcTest.forEach((q,i)=>{
+    const input=$('testSheet').querySelector('[data-question="'+i+'"]');
+    if(wcNorm(input?.value)===wcNorm(q.answer))points++;
+    input.disabled=true;
+  });
+  const percent=Math.round(100*points/wcTest.length);
+  const grade=percent>=95?6:percent>=85?5:percent>=70?4:percent>=50?3:percent>=30?2:1;
+  $('testResult').textContent='Grupa '+wcTestGroup+': '+points+'/'+wcTest.length+' ('+percent+'%), ocena '+grade;
+  $('checkTest').disabled=true;
+  msg('Wynik testu ćwiczeniowego jest widoczny. Automatyczny zapis oceny wymaga testu utworzonego przez administratora i sprawdzenia na serwerze.');
+};
+$('printTest').onclick=()=>window.print();
+$('makeVerbTest').onclick=()=>{
+  const sheet=$('verbTestSheet');sheet.replaceChildren();
+  if(!wcVerbs.length)return notice('Najpierw zapisz czasowniki.');
+  sheet.append(wcEl('h3','Test czasowników'));
+  wcShuffle(wcVerbs).slice(0,20).forEach((v,i)=>sheet.append(wcEl('p',(i+1)+'. '+v[0]+' — __________ — __________')));
+};
+$('printVerbTest').onclick=()=>window.print();
+async function wcLoadStudents(){
+  if(!user?.admin)return;
+  const {data,error}=await db.from('wordclass_profiles').select('id,login,full_name,class_id').eq('role','student').order('login');
+  if(error)return msg('Nie udało się pobrać uczniów: '+error.message);
+  wcStudents=data||[];
+  $('totalAccounts').textContent='Łącznie uczniów: '+wcStudents.length;
+  const tbody=$('accounts');tbody.replaceChildren();
+  const filter=$('filterClass')?.value||'all';
+  wcStudents.filter(s=>filter==='all'||(filter==='none'?!s.class_id:String(s.class_id)===filter)).forEach(s=>{
+    const tr=wcEl('tr');
+    const cls=classes.find(c=>c.id===s.class_id)?.name||'Bez klasy';
+    [s.login||'', '•••••', s.full_name||'—',cls,'Oceny'].forEach(v=>tr.append(wcEl('td',v)));
+    const td=wcEl('td');const button=wcEl('button','Oceny');
+    button.onclick=()=>wcOpenGrades(s);td.append(button);tr.append(td);tbody.append(tr);
+  });
+}
+$('filterClass').onchange=wcLoadStudents;
+async function wcOpenGrades(student){
+  wcGradeStudent=student;
+  $('gradeEditor').classList.remove('hidden');
+  $('gradeStudentHeading').textContent='Oceny: '+(student.full_name||student.login);
+  await wcRefreshGrades();
+}
+async function wcRefreshGrades(){
+  if(!wcGradeStudent)return;
+  const {data,error}=await db.from('wordclass_grades').select('*').eq('student_id',wcGradeStudent.id).order('created_at',{ascending:false});
+  if(error)return msg('Nie udało się pobrać ocen: '+error.message);
+  const list=$('gradeListAdmin');list.replaceChildren();
+  const nums=(data||[]).map(g=>Number(g.grade_value)).filter(Number.isFinite);
+  $('gradeAverageAdmin').textContent='Średnia: '+(nums.length?(nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(2):'brak ocen');
+  (data||[]).forEach(g=>{
+    const row=wcEl('div');row.style.margin='8px 0';
+    row.append(wcEl('span',g.grade_value+' — '+g.grade_type+' '));
+    const edit=wcEl('button','Zmień');edit.onclick=async()=>{
+      const value=prompt('Nowa ocena (1–6):',g.grade_value);
+      if(value===null)return;
+      if(!/^[1-6]$/.test(value))return notice('Podaj ocenę od 1 do 6.');
+      const {error}=await db.from('wordclass_grades').update({grade_value:value}).eq('id',g.id);
+      if(error)return notice('Nie udało się poprawić: '+error.message);
+      wcRefreshGrades();
+    };row.append(edit);list.append(row);
+  });
+}
+const gradeSelect=$('gradeValue');
+if(gradeSelect&&!gradeSelect.options.length){
+  for(let i=1;i<=6;i++){const option=wcEl('option',i);option.value=String(i);gradeSelect.append(option);}
+}
+$('addGrade').onclick=async()=>{
+  if(!wcGradeStudent)return notice('Najpierw wybierz ucznia.');
+  const {error}=await db.from('wordclass_grades').insert({student_id:wcGradeStudent.id,grade_value:$('gradeValue').value,grade_type:$('gradeType').value,source:'admin'});
+  if(error)return notice('Nie udało się dodać oceny: '+error.message);
+  wcRefreshGrades();
+};
+$('closeGrades').onclick=()=>$('gradeEditor').classList.add('hidden');
+async function wcLoadOwnGrades(){
+  if(!user||user.admin)return;
+  const {data,error}=await db.from('wordclass_grades').select('*').eq('student_id',user.id).order('created_at',{ascending:false});
+  if(error)return msg('Nie udało się pobrać ocen: '+error.message);
+  const list=$('studentGradeList');list.replaceChildren();
+  (data||[]).forEach(g=>list.append(wcEl('p',g.grade_value+' — '+g.grade_type)));
+  if(!data?.length)list.textContent='Nie masz jeszcze ocen.';
+  $('studentAverage').textContent='Średnia wymaga zatwierdzenia przez administratora.';
+}
+function wcShowResetInfo(){
+  $('resetRequests').textContent='Bezpieczne resetowanie haseł wymaga funkcji serwerowej Supabase. Nie jest jeszcze uruchomione.';
+}
+$('showResetRequest').onclick=()=>$('resetRequestForm').classList.toggle('hidden');
+$('showResetCode').onclick=()=>$('resetCodeForm').classList.toggle('hidden');
+$('sendResetRequest').onclick=()=>notice('Reset haseł wymaga dodatkowej funkcji serwerowej Supabase.');
+$('redeemResetCode').onclick=()=>notice('Reset haseł wymaga dodatkowej funkcji serwerowej Supabase.');
+$('requestAverage').onclick=()=>notice('Akceptacja średniej wymaga dodatkowej tabeli i uprawnień Supabase.');
+$('deleteAllAccounts').onclick=()=>notice('Bezpieczne usuwanie kont wymaga funkcji serwerowej Supabase. Nie usuwam samych wierszy, bo pozostawiłoby to aktywne loginy.');
+$('finishSetup').onclick=async()=>{
+  if(!user||user.admin)return;
+  const name=[$('firstName').value.trim(),$('lastName').value.trim()].filter(Boolean).join(' ');
+  const password=$('newPassword').value;
+  if(!name||password.length<6||password.length>10)return notice('Podaj imię, nazwisko i hasło od 6 do 10 znaków.');
+  const {error}=await db.auth.updateUser({password});
+  if(error)return notice('Nie udało się zmienić hasła: '+error.message);
+  const result=await db.from('wordclass_profiles').update({full_name:name}).eq('id',user.id);
+  if(result.error)return notice('Hasło zmienione, ale nie zapisano nazwiska: '+result.error.message);
+  user.full_name=name;show('student');wcStudentDashboard();
+};
