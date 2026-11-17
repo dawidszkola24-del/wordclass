@@ -540,7 +540,6 @@ function buildStudentDashboard() {
 [
   'finishSetup',
   'deleteAllAccounts',
-  'printAccounts',
   'addGrade',
   'requestAverage',
   'sendResetRequest',
@@ -642,4 +641,6 @@ $('generate').onclick = async () => {
     button.disabled = false;
   }
 };
-
+$('printAccounts').onclick = () => {
+  window.print();
+};
