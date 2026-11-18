@@ -889,22 +889,23 @@ async function wcOpenGrades(student){
   $('gradeEditor').classList.remove('hidden');
   $('gradeStudentHeading').textContent='Oceny: '+(student.full_name||student.login);
   await wcRefreshGrades();
+  $('gradeEditor').scrollIntoView({behavior:'smooth',block:'start'});
 }
 async function wcRefreshGrades(){
   if(!wcGradeStudent)return;
   const {data,error}=await db.from('wordclass_grades').select('*').eq('student_id',wcGradeStudent.id).order('created_at',{ascending:false});
   if(error)return msg('Nie udało się pobrać ocen: '+error.message);
   const list=$('gradeListAdmin');list.replaceChildren();
-  const nums=(data||[]).map(g=>Number(g.grade_value)).filter(Number.isFinite);
+  const nums=(data||[]).map(g=>Number(g.grade)).filter(n=>Number.isFinite(n) && n>=1 && n<=6);
   $('gradeAverageAdmin').textContent='Średnia: '+(nums.length?(nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(2):'brak ocen');
   (data||[]).forEach(g=>{
     const row=wcEl('div');row.style.margin='8px 0';
-    row.append(wcEl('span',g.grade_value+' — '+g.grade_type+' '));
+    row.append(wcEl('span',g.grade+' — '+g.category+' '));
     const edit=wcEl('button','Zmień');edit.onclick=async()=>{
-      const value=prompt('Nowa ocena (1–6):',g.grade_value);
+      const value=prompt('Nowa ocena (1–6):',g.grade);
       if(value===null)return;
       if(!/^[1-6]$/.test(value))return notice('Podaj ocenę od 1 do 6.');
-      const {error}=await db.from('wordclass_grades').update({grade_value:value}).eq('id',g.id);
+      const {error}=await db.from('wordclass_grades').update({grade:value,grade_value:Number(value)}).eq('id',g.id);
       if(error)return notice('Nie udało się poprawić: '+error.message);
       wcRefreshGrades();
     };row.append(edit);list.append(row);
@@ -916,7 +917,7 @@ if(gradeSelect&&!gradeSelect.options.length){
 }
 $('addGrade').onclick=async()=>{
   if(!wcGradeStudent)return notice('Najpierw wybierz ucznia.');
-  const {error}=await db.from('wordclass_grades').insert({student_id:wcGradeStudent.id,grade_value:$('gradeValue').value,grade_type:$('gradeType').value,source:'admin'});
+  const {error}=await db.from('wordclass_grades').insert({student_id:wcGradeStudent.id,grade:$('gradeValue').value,category:$('gradeType').value,grade_value:Number($('gradeValue').value),grade_type:$('gradeType').value,source:'admin'});
   if(error)return notice('Nie udało się dodać oceny: '+error.message);
   wcRefreshGrades();
 };
@@ -926,7 +927,7 @@ async function wcLoadOwnGrades(){
   const {data,error}=await db.from('wordclass_grades').select('*').eq('student_id',user.id).order('created_at',{ascending:false});
   if(error)return msg('Nie udało się pobrać ocen: '+error.message);
   const list=$('studentGradeList');list.replaceChildren();
-  (data||[]).forEach(g=>list.append(wcEl('p',g.grade_value+' — '+g.grade_type)));
+  (data||[]).forEach(g=>list.append(wcEl('p',g.grade+' — '+g.category)));
   if(!data?.length)list.textContent='Nie masz jeszcze ocen.';
   $('studentAverage').textContent='Średnia wymaga zatwierdzenia przez administratora.';
 }
