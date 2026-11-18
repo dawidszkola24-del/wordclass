@@ -552,10 +552,51 @@ function buildStudentDashboard() {
 
 // Nie zapisujemy kont ani ocen uczniów w localStorage.
 
+// Generator nauczyciela: zapewnij istnienie panelu nawet wtedy,
+// gdy index.html na GitHubie jest starsza wersja.
+function wcEnsureTeacherGeneratorPanel() {
+  const admin = $('admin');
+  if (!admin) return;
+  let panel = $('adminTestGenerator');
+  if (!panel) {
+    panel = document.createElement('section');
+    panel.id = 'adminTestGenerator';
+    panel.className = 'dashboard-section hidden';
+    panel.innerHTML = `
+      <h3>📝 Generator testów A–G</h3>
+      <p>Wpisz pary słówek, każdą w osobnej linii, np. <b>apple - jabłko</b>.
+      Utworzysz siedem wersji testu do wydruku lub zapisania jako PDF.</p>
+      <label>Tytuł testu
+        <input id="teacherTestTitle" maxlength="80" placeholder="np. Unit 3 — słówka">
+      </label>
+      <label>Słówka i tłumaczenia
+        <textarea id="teacherTestWords" rows="10" placeholder="apple - jabłko&#10;dog - pies&#10;cat - kot"></textarea>
+      </label>
+      <label>Liczba pytań w każdej grupie
+        <input id="teacherTestCount" type="number" min="1" max="50" value="3">
+      </label>
+      <label>Kierunek tłumaczenia
+        <select id="teacherTestDirection">
+          <option value="mixed">Mieszany — oba kierunki</option>
+          <option value="enpl">Angielski → polski</option>
+          <option value="plen">Polski → angielski</option>
+        </select>
+      </label>
+      <button id="teacherMakeTests" type="button">🎲 Generuj grupy A–G</button>
+      <button id="teacherPrintTests" type="button" class="secondary" disabled>🖨️ Drukuj / PDF</button>
+      <p id="teacherTestStatus" role="status" aria-live="polite"></p>
+      <div id="teacherTestPreview"></div>`;
+  }
+  // Sekcja musi być bezpośrednim dzieckiem #admin, nie innego kafelka.
+  admin.append(panel);
+  panel.classList.add('hidden');
+}
+
 // ------------------------------------------
 // START STRONY
 // ------------------------------------------
 
+wcEnsureTeacherGeneratorPanel();
 buildAdminDashboard();
 buildStudentDashboard();
 
