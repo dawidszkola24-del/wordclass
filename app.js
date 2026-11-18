@@ -365,7 +365,7 @@ function buildAdminDashboard() {
       id: 'adminAccounts',
       icon: '👥',
       title: 'Konta uczniów',
-      desc: 'Wkrótce: konta i hasła',
+      desc: 'Loginy, uczniowie, klasy i odzyskiwanie dostępu',
       start: [...admin.children].find(
         element =>
           element.tagName === 'H3' &&
@@ -440,7 +440,7 @@ function buildAdminDashboard() {
 
     tile.onclick = () => {
       openAdminSection(block.id);
-      if (block.id === 'adminGrades') wcLoadStudents();
+      if (block.id === 'adminGrades' || block.id === 'adminAccounts') wcLoadStudents();
       if (block.id === 'adminResets') wcShowResetInfo();
     };
 
@@ -924,13 +924,31 @@ async function wcLoadStudents(){
   wcStudents=data||[];
   $('totalAccounts').textContent='Łącznie uczniów: '+wcStudents.length;
   const tbody=$('accounts');tbody.replaceChildren();
+  // Dopasuj nagłówki do sześciu kolumn istniejącej tabeli.
+  const table=tbody.closest('table');
+  if(table){
+    let thead=table.querySelector('thead');
+    if(!thead){thead=document.createElement('thead');table.prepend(thead);}
+    thead.replaceChildren();
+    const header=wcEl('tr');
+    ['Login','Hasło','Imię i nazwisko','Klasa','Status','Działania'].forEach(label=>header.append(wcEl('th',label)));
+    thead.append(header);
+  }
   const filter=$('filterClass')?.value||'all';
   wcStudents.filter(s=>filter==='all'||(filter==='none'?!s.class_id:String(s.class_id)===filter)).forEach(s=>{
     const tr=wcEl('tr');
-    const cls=classes.find(c=>c.id===s.class_id)?.name||'Bez klasy';
-    [s.login||'', '•••••', s.full_name||'—',cls,'Oceny'].forEach(v=>tr.append(wcEl('td',v)));
-    const td=wcEl('td');const button=wcEl('button','Oceny');
-    button.onclick=()=>wcOpenGrades(s);td.append(button);tr.append(td);tbody.append(tr);
+    const cls=classes.find(c=>String(c.id)===String(s.class_id))?.name||'Bez klasy';
+    const cells=[s.login||'', '🔒 Nie można odczytać', s.full_name||'Nie podano', cls, s.class_id?'Przypisany':'⚠️ Bez klasy'];
+    cells.forEach(v=>tr.append(wcEl('td',v)));
+    const actions=wcEl('td');
+    const grades=wcEl('button','📊 Oceny');
+    grades.type='button';
+    grades.onclick=()=>wcOpenGrades(s);
+    const reset=wcEl('button','🔑 Hasło');
+    reset.type='button';reset.className='secondary';
+    reset.onclick=()=>notice('Hasła ucznia '+(s.login||'')+' nie można odczytać. Bezpieczne ustawienie nowego hasła wymaga uruchomienia funkcji serwerowej Supabase. Nie wpisuj nowego hasła w tabeli ani w SQL.');
+    actions.append(grades,document.createTextNode(' '),reset);
+    tr.append(actions);tbody.append(tr);
   });
 }
 $('filterClass').onchange=wcLoadStudents;
