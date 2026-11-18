@@ -459,6 +459,13 @@ function buildAdminDashboard() {
 
   approvals.onclick = () => { openAdminSection('adminGrades'); wcLoadStudents(); }; 
   dashboard.append(approvals);
+
+  const testTile = document.createElement('button');
+  testTile.type = 'button';
+  testTile.className = 'dashboard-tile';
+  testTile.innerHTML = '<span class="tile-icon">📝</span><strong>Generator testów A–G</strong><small>Testy do wydruku i PDF</small><span class="tile-arrow">Otwórz →</span>';
+  testTile.onclick = () => openAdminSection('adminTestGenerator');
+  dashboard.append(testTile);
 }
 
 function showAdminDashboard() {
@@ -469,7 +476,8 @@ function showAdminDashboard() {
     'adminClasses',
     'adminAccounts',
     'adminResets',
-    'adminGrades'
+    'adminGrades',
+    'adminTestGenerator'
   ].forEach(id => {
     if ($(id)) $(id).classList.add('hidden');
   });
@@ -485,7 +493,8 @@ function openAdminSection(id) {
     'adminClasses',
     'adminAccounts',
     'adminResets',
-    'adminGrades'
+    'adminGrades',
+    'adminTestGenerator'
   ].forEach(name => {
     if ($(name)) {
       $(name).classList.toggle('hidden', name !== id);
@@ -1004,4 +1013,80 @@ $('finishSetup').onclick=async()=>{
   const result=await db.from('wordclass_profiles').update({full_name:name}).eq('id',user.id);
   if(result.error)return notice('Hasło zmienione, ale nie zapisano nazwiska: '+result.error.message);
   user.full_name=name;show('student');wcStudentDashboard();
+};
+
+// WORDCLASS — generator testów nauczyciela (wersja do druku).
+// Nie zapisuje odpowiedzi ani ocen, nie publikuje testów online.
+let wcTeacherGenerated = [];
+function wcTeacherShuffle(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+$('teacherMakeTests').onclick = () => {
+  if (!user?.admin) return notice('Zaloguj się jako administrator.');
+  const lines = $('teacherTestWords').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const pairs = [];
+  for (const line of lines) {
+    const parts = line.split(/\s+-\s+/).map(part => part.trim());
+    if (parts.length !== 2 || !parts.every(Boolean)) {
+      $('teacherTestStatus').textContent = 'Popraw linię: ' + line + ' (wymagany format: apple - jabłko)';
+      return;
+    }
+    pairs.push(parts);
+  }
+  const count = Number($('teacherTestCount').value);
+  if (!pairs.length || pairs.length > 100) return notice('Wpisz od 1 do 100 par słówek.');
+  if (!Number.isInteger(count) || count < 1 || count > 50 || count > pairs.length) {
+    return notice('Liczba pytań musi wynosić od 1 do 50 i nie może przekraczać liczby słówek.');
+  }
+  const direction = $('teacherTestDirection').value;
+  const title = $('teacherTestTitle').value.trim() || 'Test ze słówek';
+  wcTeacherGenerated = [...'ABCDEFG'].map(group => ({
+    group, title,
+    questions: wcTeacherShuffle(pairs).slice(0, count).map(pair => {
+      const reverse = direction === 'plen' || (direction === 'mixed' && Math.random() < 0.5);
+      return { question: reverse ? pair[1] : pair[0], answer: reverse ? pair[0] : pair[1] };
+    })
+  }));
+  const preview = $('teacherTestPreview');
+  preview.replaceChildren();
+  wcTeacherGenerated.forEach(test => {
+    const section = wcEl('section');
+    section.style.cssText = 'margin:18px 0;padding:16px;border:1px solid #ddd;border-radius:12px;';
+    section.append(wcEl('h3', test.title + ' — Grupa ' + test.group));
+    section.append(wcEl('p', 'Imię i nazwisko: __________________________  Klasa: __________'));
+    test.questions.forEach((q, i) => {
+      const p = wcEl('p', (i + 1) + '. ' + q.question + '   ______________________________');
+      p.style.margin = '16px 0';
+      section.append(p);
+    });
+    preview.append(section);
+  });
+  $('teacherPrintTests').disabled = false;
+  $('teacherTestStatus').textContent = 'Gotowe! Utworzono 7 grup (A–G), po ' + count + ' pytań. Możesz wydrukować lub zapisać jako PDF.';
+};
+$('teacherPrintTests').onclick = () => {
+  if (!user?.admin || !wcTeacherGenerated.length) return;
+  const popup = window.open('', '_blank');
+  if (!popup) return notice('Zezwól na wyskakujące okna, aby wydrukować test.');
+  const doc = popup.document;
+  doc.title = 'WordClass — testy A–G';
+  const style = doc.createElement('style');
+  style.textContent = '@page{size:A4;margin:16mm}body{font-family:Arial,sans-serif;color:#222}section{break-after:page;page-break-after:always}section:last-child{break-after:auto;page-break-after:auto}h2{color:#5645c7}p{margin:22px 0}button{padding:12px 20px;background:#5645c7;color:white;border:0;border-radius:8px}@media print{button{display:none}}';
+  doc.head.append(style);
+  const printButton = doc.createElement('button');
+  printButton.textContent = '🖨️ Drukuj / zapisz jako PDF';
+  printButton.onclick = () => popup.print();
+  doc.body.append(printButton);
+  wcTeacherGenerated.forEach(test => {
+    const section = doc.createElement('section');
+    section.append(wcEl('h2', 'WordClass — ' + test.title + ' — Grupa ' + test.group));
+    section.append(wcEl('p', 'Imię i nazwisko: __________________________  Klasa: __________'));
+    test.questions.forEach((q, i) => section.append(wcEl('p', (i + 1) + '. ' + q.question + '   ______________________________')));
+    doc.body.append(section);
+  });
 };
