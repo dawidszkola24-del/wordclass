@@ -1131,3 +1131,213 @@ $('teacherPrintTests').onclick = () => {
     doc.body.append(section);
   });
 };
+
+// ===== WordClass: drukowanie / usuwanie podglądu =====
+(function wcAddDeletePreview() {
+  const print = $('teacherPrintTests');
+  if (!print || $('teacherClearTests')) return;
+  const button = document.createElement('button');
+  button.id = 'teacherClearTests'; button.type = 'button'; button.className = 'danger';
+  button.textContent = '🗑️ Usuń testy';
+  print.after(button);
+  button.onclick = () => {
+    if (!user?.admin || !confirm('Usunąć wygenerowane grupy A–G z podglądu?')) return;
+    wcTeacherGenerated = [];
+    $('teacherTestPreview').replaceChildren();
+    $('teacherPrintTests').disabled = true;
+    $('teacherTestStatus').textContent = 'Usunięto testy z podglądu. Słówka pozostały.';
+  };
+})();
+
+// ===== WordClass: testy online (funkcje serwerowe Supabase) =====
+let wcOnlineActive = null;
+let wcOnlineTimer = null;
+let wcOnlineAnswers = {};
+let wcOnlineSaving = Promise.resolve();
+const wcOnlineRpc = async (name, params = {}) => {
+  const {data, error} = await db.rpc(name, params);
+  if (error) throw new Error(error.message + ' — sprawdź, czy uruchomiono 02_SUPABASE_SQL.sql');
+  return data;
+};
+function wcOnlineStopTimer() { if (wcOnlineTimer) clearInterval(wcOnlineTimer); wcOnlineTimer = null; }
+function wcOnlineParsePairs() {
+  const lines = $('teacherTestWords').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  const pairs = lines.map(line => line.split(/\s+-\s+/).map(x=>x.trim()));
+  if (!pairs.length || pairs.length>100 || pairs.some(x=>x.length!==2||!x.every(Boolean))) throw new Error('Wpisz 1–100 par w formacie: apple - jabłko');
+  return pairs;
+}
+function wcOnlineBuildUI() {
+  const panel = $('adminTestGenerator');
+  const section = document.createElement('section');
+  section.style.cssText = 'margin-top:28px;padding:18px;border:1px solid #ddd;border-radius:14px;';
+  section.innerHTML = `
+    <h3>💻 Publikuj test / egzamin online</h3>
+    <p>Używa słówek i tytułu wpisanych wyżej. Uczeń dostaje losową grupę A–G. Ocena trafia do dziennika.</p>
+    <label>Rodzaj <select id="wcOnlineKind"><option>Test</option><option>Egzamin</option></select></label>
+    <label>Klasa <select id="wcOnlineClass"></select></label>
+    <label>Od kiedy <input id="wcOnlineFrom" type="datetime-local"></label>
+    <label>Do kiedy <input id="wcOnlineTo" type="datetime-local"></label>
+    <label>Minuty na rozwiązanie <input id="wcOnlineMinutes" type="number" min="1" max="180" value="15"></label>
+    <button type="button" id="wcOnlinePublish">📤 Wyślij test uczniom</button>
+    <p id="wcOnlineAdminStatus" role="status"></p>
+    <h3>🗂️ Zarządzaj opublikowanymi testami</h3>
+    <button type="button" id="wcOnlineRefresh" class="secondary">🔄 Odśwież listę</button> <button type="button" id="wcOnlineClearEnded" class="danger">🧹 Usuń zakończone</button>
+    <div id="wcOnlineAdminList"></div>`;
+  panel.append(section);
+  $('wcOnlinePublish').onclick = wcOnlinePublish;
+  $('wcOnlineRefresh').onclick = wcOnlineAdminList;
+  $('wcOnlineClearEnded').onclick = wcOnlineClearEnded;
+  const origOpen = openAdminSection;
+  openAdminSection = function(id) {
+    origOpen(id);
+    if (id==='adminTestGenerator') wcOnlineAdminList();
+  };
+  const tab = document.createElement('div');
+  tab.id = 'onlineTests'; tab.className = 'tab hidden';
+  tab.innerHTML = '<h3>💻 Moje sprawdziany online</h3><button type="button" id="wcOnlineStudentRefresh" class="secondary">🔄 Odśwież</button><div id="wcOnlineStudentList"></div><div id="wcOnlineExamArea"></div>';
+  $('student').append(tab);
+  const nav = $('studentTiles');
+  const tile = document.createElement('button');
+  tile.type='button';tile.className='dashboard-tile';
+  tile.innerHTML='<span class="tile-icon">⏱️</span><strong>Sprawdziany online</strong><small>Testy od nauczyciela</small><span class="tile-arrow">Otwórz →</span>';
+  tile.onclick = () => wcOpenStudentTab('onlineTests');
+  nav.append(tile);
+  $('wcOnlineStudentRefresh').onclick = wcOnlineStudentList;
+  const origTab = wcOpenStudentTab;
+  wcOpenStudentTab = function(name) { origTab(name); if (name==='onlineTests') wcOnlineStudentList(); else wcOnlineStopTimer(); };
+  const origStudentDashboard = wcStudentDashboard;
+  wcStudentDashboard = function() { wcOnlineStopTimer(); origStudentDashboard(); };
+  const origLogout = logout;
+  logout = async function() { wcOnlineStopTimer(); wcOnlineActive=null; await origLogout(); };
+}
+async function wcOnlinePublish() {
+  if (!user?.admin) return;
+  const button=$('wcOnlinePublish'); button.disabled=true;
+  try {
+    const pairs=wcOnlineParsePairs();
+    const start=$('wcOnlineFrom').value, end=$('wcOnlineTo').value;
+    if (!start || !end) throw new Error('Ustaw datę i godzinę rozpoczęcia oraz zakończenia.');
+    const count=Number($('teacherTestCount').value);
+    const id=await wcOnlineRpc('wc_online_create',{
+      p_title:$('teacherTestTitle').value.trim()||'Test ze słówek',
+      p_kind:$('wcOnlineKind').value,
+      p_class_id:Number($('wcOnlineClass').value),
+      p_start:new Date(start).toISOString(),p_end:new Date(end).toISOString(),
+      p_minutes:Number($('wcOnlineMinutes').value),p_pairs:pairs,
+      p_count:count,p_direction:$('teacherTestDirection').value
+    });
+    $('wcOnlineAdminStatus').textContent='✅ Opublikowano sprawdzian nr '+id+' dla wybranej klasy.';
+    await wcOnlineAdminList();
+  } catch(e) { $('wcOnlineAdminStatus').textContent='❌ '+e.message; }
+  finally { button.disabled=false; }
+}
+async function wcOnlineAdminList() {
+  if (!user?.admin) return;
+  const select=$('wcOnlineClass'), previous=select.value;
+  select.replaceChildren();
+  classes.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.name;select.append(o);});
+  if (previous) select.value=previous;
+  const area=$('wcOnlineAdminList');area.textContent='Ładowanie…';
+  try {
+    const items=await wcOnlineRpc('wc_online_admin_list');area.replaceChildren();
+    if (!items.length) area.textContent='Nie ma jeszcze testów online.';
+    for (const item of items) {
+      const row=wcEl('div');row.style.cssText='padding:12px;margin:10px 0;border:1px solid #ddd;border-radius:10px;';
+      const className=classes.find(c=>String(c.id)===String(item.class_id))?.name||'Klasa';
+      row.append(wcEl('strong',item.kind+' — '+item.title+' ('+className+')'));
+      row.append(wcEl('p','Od '+new Date(item.starts_at).toLocaleString('pl-PL')+' do '+new Date(item.ends_at).toLocaleString('pl-PL')+' • '+item.duration_minutes+' min • rozpoczęto '+item.attempts+', oddano '+item.submitted+(item.closed?' • ZAMKNIĘTY':'')));
+      const results=wcEl('button','📊 Wyniki');results.type='button';
+      results.onclick=async()=>{
+        try { const data=await wcOnlineRpc('wc_online_admin_results',{p_exam_id:item.id});
+          const display=wcEl('div');display.style.whiteSpace='pre-wrap';
+          display.textContent=data.length?data.map(a=>(a.student||a.login||'Uczeń')+' • grupa '+a.group+' • '+(a.grade?'ocena '+a.grade+' ('+a.points+'/'+a.total+')':'jeszcze nie oddano')).join('\n'):'Brak prób.';
+          row.querySelector('.wcResults')?.remove();display.className='wcResults';row.append(display);
+        } catch(e){notice(e.message);} };
+      const close=wcEl('button','🔒 Zamknij');close.type='button';close.className='secondary';close.disabled=item.closed;
+      close.onclick=async()=>{if(!confirm('Zamknąć test dla nowych prób? Rozpoczęte próby nadal mają swój licznik.'))return;try{await wcOnlineRpc('wc_online_manage',{p_id:item.id,p_action:'close'});wcOnlineAdminList();}catch(e){notice(e.message);}};
+      const del=wcEl('button','🗑️ Usuń');del.type='button';del.className='danger';
+      del.onclick=async()=>{if(!confirm('Trwale usunąć test '+item.title+' i próby? Oceny w dzienniku pozostaną.'))return;try{await wcOnlineRpc('wc_online_manage',{p_id:item.id,p_action:'delete'});wcOnlineAdminList();}catch(e){notice(e.message);}};
+      row.append(results,close,del);area.append(row);
+    }
+  } catch(e){area.textContent='❌ '+e.message;}
+}
+async function wcOnlineStudentList() {
+  if (!user || user.admin) return;
+  const area=$('wcOnlineStudentList');area.textContent='Ładowanie…';
+  try {
+    const items=await wcOnlineRpc('wc_online_student_list');area.replaceChildren();
+    if (!items.length) area.textContent='Nauczyciel nie opublikował jeszcze testów dla Twojej klasy.';
+    for (const item of items) {
+      const row=wcEl('div');row.style.cssText='padding:12px;margin:10px 0;border:1px solid #ddd;border-radius:10px;';
+      row.append(wcEl('strong',item.kind+' — '+item.title));
+      row.append(wcEl('p',new Date(item.starts_at).toLocaleString('pl-PL')+' – '+new Date(item.ends_at).toLocaleString('pl-PL')+' • '+item.duration_minutes+' min'));
+      const button=wcEl('button',item.submitted_at?'✅ Oddano • ocena '+item.grade:item.started_at?'▶️ Kontynuuj':'▶️ Rozpocznij');
+      const now=Date.now();
+      button.disabled=!!item.submitted_at || (!item.started_at && (item.closed || now<Date.parse(item.starts_at) || now>=Date.parse(item.ends_at)));
+      button.onclick=()=>wcOnlineStart(item.id);
+      row.append(button);area.append(row);
+    }
+  }catch(e){area.textContent='❌ '+e.message;}
+}
+async function wcOnlineStart(id) {
+  try {
+    const data=await wcOnlineRpc('wc_online_start',{p_exam_id:id});
+    wcOnlineStopTimer();wcOnlineActive=data;wcOnlineAnswers={};wcOnlineSaving=Promise.resolve();
+    const area=$('wcOnlineExamArea');area.replaceChildren();
+    area.append(wcEl('h3',data.title+' — Grupa '+data.group));
+    const timer=wcEl('h2');timer.id='wcOnlineClock';area.append(timer);
+    data.questions.forEach((q,i)=>{
+      const label=wcEl('label',(i+1)+'. '+q.question);
+      const input=wcEl('input');input.placeholder='Wpisz tłumaczenie';input.value=q.answer||'';
+      wcOnlineAnswers[String(i)]=input.value;
+      input.oninput=()=>{wcOnlineAnswers[String(i)]=input.value;wcOnlineQueueSave();};
+      label.append(input);area.append(label);
+    });
+    const status=wcEl('p');status.id='wcOnlineStatus';area.append(status);
+    const finish=wcEl('button','✅ Oddaj sprawdzian');finish.type='button';finish.onclick=()=>wcOnlineFinish(false);area.append(finish);
+    const update=()=>{
+      if (!wcOnlineActive) return;
+      const remaining=Math.max(0,Math.ceil((Date.parse(data.deadline)-Date.now())/1000));
+      timer.textContent='⏱️ '+String(Math.floor(remaining/60)).padStart(2,'0')+':'+String(remaining%60).padStart(2,'0');
+      if(remaining===0){wcOnlineStopTimer();wcOnlineFinish(true);}
+    };
+    update();wcOnlineTimer=setInterval(update,1000);
+    area.scrollIntoView({behavior:'smooth',block:'start'});
+  } catch(e){notice(e.message);await wcOnlineStudentList();}
+}
+function wcOnlineQueueSave() {
+  if (!wcOnlineActive) return;
+  const id=wcOnlineActive.id, snapshot={...wcOnlineAnswers};
+  wcOnlineSaving=wcOnlineSaving.catch(()=>{}).then(()=>wcOnlineRpc('wc_online_save',{p_exam_id:id,p_answers:snapshot}));
+  wcOnlineSaving.catch(e=>{if($('wcOnlineStatus'))$('wcOnlineStatus').textContent='⚠️ Błąd zapisu: '+e.message;});
+}
+async function wcOnlineFinish(auto) {
+  if(!wcOnlineActive)return;
+  if(!auto && !confirm('Oddać test? Po oddaniu nie można zmienić odpowiedzi.'))return;
+  wcOnlineStopTimer();const id=wcOnlineActive.id;
+  const status=$('wcOnlineStatus');if(status)status.textContent='Zapisywanie i ocenianie…';
+  try {
+    await wcOnlineSaving.catch(()=>{});
+    // Best effort final save; server rejects late writes, then grades last saved answers.
+    if(!auto) await wcOnlineRpc('wc_online_save',{p_exam_id:id,p_answers:{...wcOnlineAnswers}});
+    const result=await wcOnlineRpc('wc_online_finish',{p_exam_id:id});
+    wcOnlineActive=null;
+    $('wcOnlineExamArea').replaceChildren(wcEl('h3','✅ Oddano! Wynik: '+result.points+'/'+result.total+' • Ocena '+result.grade));
+    await wcOnlineStudentList();
+  }catch(e){if(status)status.textContent='⚠️ '+e.message+' — odśwież listę, aby sprawdzić wynik.';}
+}
+wcOnlineBuildUI();
+
+async function wcOnlineClearEnded() {
+  if (!user?.admin) return;
+  try {
+    const items=await wcOnlineRpc('wc_online_admin_list');
+    const ended=items.filter(x=>x.closed || Date.parse(x.ends_at)<=Date.now());
+    if (!ended.length) return notice('Brak zakończonych testów do usunięcia.');
+    if (!confirm('Usunąć '+ended.length+' zakończonych testów/egzaminów i ich próby? Oceny w dzienniku pozostaną.')) return;
+    let count=0;
+    for (const item of ended) { await wcOnlineRpc('wc_online_manage',{p_id:item.id,p_action:'delete'});count++; }
+    notice('Usunięto '+count+' zakończonych testów. Oceny pozostały.');
+    await wcOnlineAdminList();
+  } catch(e) {notice('Przerwano usuwanie: '+e.message);await wcOnlineAdminList();}
+}
