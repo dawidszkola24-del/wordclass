@@ -939,7 +939,61 @@ $('showResetCode').onclick=()=>$('resetCodeForm').classList.toggle('hidden');
 $('sendResetRequest').onclick=()=>notice('Reset haseł wymaga dodatkowej funkcji serwerowej Supabase.');
 $('redeemResetCode').onclick=()=>notice('Reset haseł wymaga dodatkowej funkcji serwerowej Supabase.');
 $('requestAverage').onclick=()=>notice('Akceptacja średniej wymaga dodatkowej tabeli i uprawnień Supabase.');
-$('deleteAllAccounts').onclick=()=>notice('Bezpieczne usuwanie kont wymaga funkcji serwerowej Supabase. Nie usuwam samych wierszy, bo pozostawiłoby to aktywne loginy.');
+// Bezpieczne usuwanie kont: Edge Function usuwa jedno konto na wywołanie.
+// Nazwa widoczna w panelu Supabase może różnić się od faktycznego sluga URL.
+const wcDeleteFunctionUrl = 'https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/super-processor';
+$('deleteAllAccounts').onclick = async () => {
+  if (!user?.admin) return notice('Zaloguj się jako administrator.');
+  const { data: students, error: listError } = await db
+    .from('wordclass_profiles')
+    .select('id,login')
+    .eq('role', 'student');
+  if (listError) return notice('Nie udało się sprawdzić uczniów: ' + listError.message);
+  if (!students?.length) return notice('Nie ma kont uczniów do usunięcia.');
+
+  const confirmation = prompt(
+    'UWAGA! Usuniesz trwale ' + students.length + ' kont uczniów, ich hasła i oceny.\n' +
+    'Klasy pozostaną bez zmian.\n\nAby potwierdzić, wpisz dokładnie: USUN'
+  );
+  if (confirmation !== 'USUN') return;
+
+  const button = $('deleteAllAccounts');
+  button.disabled = true;
+  const previousText = button.textContent;
+  let removed = 0;
+  try {
+    const { data: sessionData, error: sessionError } = await db.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (sessionError || !token) throw new Error('Sesja wygasła. Zaloguj się ponownie.');
+
+    for (const student of students) {
+      button.textContent = 'Usuwanie uczniów: ' + removed + '/' + students.length;
+      const response = await fetch(wcDeleteFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': 'sb_publishable_lT_I31LEre8X0h3H5hAWtw_54mud94_',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ student_id: student.id })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.success !== true) {
+        throw new Error('Uczeń ' + (student.login || student.id) + ': ' +
+          (result.error || 'Błąd serwera HTTP ' + response.status));
+      }
+      removed++;
+    }
+    notice('Usunięto ' + removed + ' kont uczniów. Klasy nie zostały usunięte.');
+  } catch (error) {
+    notice('Usunięto ' + removed + ' z ' + students.length + ' kont. ' +
+      'Przerwano usuwanie: ' + error.message + '. Sprawdź dane przed ponowną próbą.');
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+    await wcLoadStudents();
+  }
+};
 $('finishSetup').onclick=async()=>{
   if(!user||user.admin)return;
   const name=[$('firstName').value.trim(),$('lastName').value.trim()].filter(Boolean).join(' ');
