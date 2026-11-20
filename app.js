@@ -1087,80 +1087,131 @@ $('finishSetup').onclick=async()=>{
   user.full_name=name;show('student');wcStudentDashboard();
 };
 
-// WORDCLASS — generator testów nauczyciela (wersja do druku).
-// Nie zapisuje odpowiedzi ani ocen, nie publikuje testów online.
+// WORDCLASS — kolorowy generator różnych typów zadań do druku.
+// Publikacja online nadal używa dotychczasowego, zgodnego z Supabase formatu.
 let wcTeacherGenerated = [];
+const wcTaskTypes = [
+  {id:'closed',name:'Zamknięte ABCD',icon:'🔵',color:'#3159d8',bg:'#eaf0ff',desc:'Wybierz poprawną odpowiedź'},
+  {id:'open',name:'Otwarte',icon:'🟣',color:'#8545ce',bg:'#f2eaff',desc:'Wpisz tłumaczenie'},
+  {id:'matching',name:'Łączenie w pary',icon:'🟢',color:'#087e72',bg:'#e2f7f1',desc:'Dopasuj wyrazy'},
+  {id:'numbers',name:'Liczby i literki',icon:'🟠',color:'#b9660e',bg:'#fff0dc',desc:'Połącz 1–C, 2–A'},
+  {id:'gaps',name:'Uzupełnij luki',icon:'🌸',color:'#b93570',bg:'#ffeaf2',desc:'Wpisz brakujące słowo'},
+  {id:'truefalse',name:'Prawda / Fałsz',icon:'🟩',color:'#327d35',bg:'#e7f6e7',desc:'Oceń poprawność pary'}
+];
+const wcChosenTasks = new Set(['closed','open','matching','numbers']);
 function wcTeacherShuffle(items) {
   const result = [...items];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
+  for (let i=result.length-1;i>0;i--) {
+    const j=Math.floor(Math.random()*(i+1));
+    [result[i],result[j]]=[result[j],result[i]];
   }
   return result;
 }
-$('teacherMakeTests').onclick = () => {
-  if (!user?.admin) return notice('Zaloguj się jako administrator.');
-  const lines = $('teacherTestWords').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  const pairs = [];
-  for (const line of lines) {
-    const parts = line.split(/\s+-\s+/).map(part => part.trim());
-    if (parts.length !== 2 || !parts.every(Boolean)) {
-      $('teacherTestStatus').textContent = 'Popraw linię: ' + line + ' (wymagany format: apple - jabłko)';
-      return;
-    }
-    pairs.push(parts);
+function wcBuildTaskTiles(){
+  const target=$('teacherMakeTests');
+  if(!target || $('wcTaskTiles'))return;
+  const wrap=wcEl('div');wrap.id='wcTaskTiles';
+  wrap.style.cssText='margin:20px 0;padding:20px;border:1px solid #e5e7ef;border-radius:20px;background:#fafaff;box-shadow:0 8px 28px rgba(45,39,95,.07)';
+  const title=wcEl('h3','🎨 Wybierz rodzaje zadań');title.style.margin='0 0 5px';wrap.append(title);
+  const intro=wcEl('p','Kliknij kolorowe kafelki. Możesz zaznaczyć kilka typów do jednego testu A–G.');intro.style.margin='0 0 16px';wrap.append(intro);
+  const grid=wcEl('div');grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px';
+  wcTaskTypes.forEach(t=>{
+    const tile=wcEl('button');tile.type='button';tile.dataset.type=t.id;
+    tile.style.cssText='display:flex;flex-direction:column;gap:7px;align-items:flex-start;text-align:left;min-height:120px;padding:16px;border-radius:16px;cursor:pointer;transition:transform .15s,box-shadow .15s;white-space:normal';
+    const heading=wcEl('strong',t.icon+' '+t.name);heading.style.fontSize='16px';
+    const desc=wcEl('span',t.desc);desc.style.cssText='font-size:13px;opacity:.83';
+    const mark=wcEl('span');mark.style.cssText='font-size:13px;font-weight:700';
+    tile.append(heading,desc,mark);
+    const paint=()=>{const on=wcChosenTasks.has(t.id);tile.style.background=t.bg;tile.style.color=t.color;tile.style.border=on?'3px solid '+t.color:'2px solid #dfe2eb';tile.style.boxShadow=on?'0 5px 16px rgba(30,30,60,.12)':'none';tile.setAttribute('aria-pressed',String(on));mark.textContent=on?'✓ ZAZNACZONE':'○ Wybierz';};
+    tile.onclick=()=>{wcChosenTasks.has(t.id)?wcChosenTasks.delete(t.id):wcChosenTasks.add(t.id);paint();counter.textContent='Wybrano: '+wcChosenTasks.size+' z 6';};
+    paint();grid.append(tile);
+  });
+  wrap.append(grid);
+  const counter=wcEl('p','Wybrano: '+wcChosenTasks.size+' z 6');counter.style.cssText='font-weight:700;margin:14px 0 4px';wrap.append(counter);
+  const note=wcEl('p','🖨️ Wybrane typy działają w wydruku/PDF. 💻 Publikowanie online na razie korzysta z dotychczasowego formatu — nowe typy wymagają osobnej aktualizacji Supabase.');note.style.cssText='font-size:13px;color:#57566b;margin:6px 0 0';wrap.append(note);
+  target.before(wrap);
+}
+wcBuildTaskTiles();
+function wcMakeTask(type,pair,pairs,direction){
+  const reverse=direction==='plen'||(direction==='mixed'&&Math.random()<.5);
+  const question=reverse?pair[1]:pair[0],answer=reverse?pair[0]:pair[1];
+  if(type==='closed'){
+    const alternatives=[...new Set(pairs.map(p=>reverse?p[0]:p[1]).filter(v=>v!==answer))];
+    if(alternatives.length<3)return {type:'open',question,answer};
+    return {type,question,answer,choices:wcTeacherShuffle([answer,...wcTeacherShuffle(alternatives).slice(0,3)])};
   }
-  const count = Number($('teacherTestCount').value);
-  if (!pairs.length || pairs.length > 100) return notice('Wpisz od 1 do 100 par słówek.');
-  if (!Number.isInteger(count) || count < 1 || count > 50 || count > pairs.length) {
-    return notice('Liczba pytań musi wynosić od 1 do 50 i nie może przekraczać liczby słówek.');
+  if(type==='truefalse'){
+    const others=pairs.map(p=>reverse?p[0]:p[1]).filter(v=>v!==answer);
+    const correct=Math.random()<.5||!others.length;
+    return {type,question,shown:correct?answer:wcTeacherShuffle(others)[0],answer:correct?'Prawda':'Fałsz'};
   }
-  const direction = $('teacherTestDirection').value;
-  const title = $('teacherTestTitle').value.trim() || 'Test ze słówek';
-  wcTeacherGenerated = [...'ABCDEFG'].map(group => ({
-    group, title,
-    questions: wcTeacherShuffle(pairs).slice(0, count).map(pair => {
-      const reverse = direction === 'plen' || (direction === 'mixed' && Math.random() < 0.5);
-      return { question: reverse ? pair[1] : pair[0], answer: reverse ? pair[0] : pair[1] };
-    })
-  }));
-  const preview = $('teacherTestPreview');
-  preview.replaceChildren();
-  wcTeacherGenerated.forEach(test => {
-    const section = wcEl('section');
-    section.style.cssText = 'margin:18px 0;padding:16px;border:1px solid #ddd;border-radius:12px;';
-    section.append(wcEl('h3', test.title + ' — Grupa ' + test.group));
-    section.append(wcEl('p', 'Imię i nazwisko: __________________________  Klasa: __________'));
-    test.questions.forEach((q, i) => {
-      const p = wcEl('p', (i + 1) + '. ' + q.question + '   ______________________________');
-      p.style.margin = '16px 0';
-      section.append(p);
+  if(type==='gaps')return {type,question,answer};
+  return {type,question,answer};
+}
+function wcMakeMatching(type,pairs,direction){
+  const reverse=direction==='plen'||(direction==='mixed'&&Math.random()<.5);
+  const picked=wcTeacherShuffle(pairs).slice(0,Math.min(4,pairs.length));
+  const left=picked.map(p=>reverse?p[1]:p[0]);
+  const right=wcTeacherShuffle(picked.map(p=>reverse?p[0]:p[1]));
+  return {type,left,right,answers:left.map(x=>right.indexOf((picked.find(p=>(reverse?p[1]:p[0])===x)||[])[reverse?0:1])+1)};
+}
+function wcTeacherParse(){
+  const lines=$('teacherTestWords').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const pairs=lines.map(line=>line.split(/\s+-\s+/).map(x=>x.trim()));
+  if(!pairs.length||pairs.length>100||pairs.some(p=>p.length!==2||!p.every(Boolean)))throw Error('Wpisz 1–100 par, np. apple - jabłko.');
+  return pairs;
+}
+function wcTaskText(q,index){
+  const n=(index+1)+'. ';
+  if(q.type==='closed')return n+'Wybierz tłumaczenie: '+q.question+'\n'+q.choices.map((x,i)=>'   '+String.fromCharCode(65+i)+') '+x).join('     ');
+  if(q.type==='truefalse')return n+'Prawda czy fałsz? '+q.question+' — '+q.shown+'    ☐ Prawda    ☐ Fałsz';
+  if(q.type==='gaps')return n+'Uzupełnij tłumaczenie: '+q.question+' — __________________________';
+  if(q.type==='matching'||q.type==='numbers')return n+(q.type==='matching'?'Połącz w pary:':'Dopasuj liczby do liter:')+'\n'+q.left.map((x,i)=>'   '+(i+1)+'. '+x+'  ______').join('\n')+'\n'+q.right.map((x,i)=>'   '+String.fromCharCode(65+i)+'. '+x).join('\n');
+  return n+'Przetłumacz: '+q.question+'   __________________________';
+}
+function wcTaskAnswer(q){
+  if(q.type==='matching'||q.type==='numbers')return q.answers.map((x,i)=>(i+1)+'–'+String.fromCharCode(64+x)).join(', ');
+  if(q.type==='closed')return String.fromCharCode(65+q.choices.indexOf(q.answer))+') '+q.answer;
+  return q.answer;
+}
+$('teacherMakeTests').onclick=()=>{
+  if(!user?.admin)return notice('Zaloguj się jako administrator.');
+  try{
+    const pairs=wcTeacherParse();
+    const count=Number($('teacherTestCount').value);
+    if(!Number.isInteger(count)||count<1||count>50||count>pairs.length)throw Error('Liczba zadań musi wynosić 1–50 i nie może przekraczać liczby słówek.');
+    if(!wcChosenTasks.size)throw Error('Zaznacz przynajmniej jeden kolorowy kafelek.');
+    const types=[...wcChosenTasks],direction=$('teacherTestDirection').value;
+    const title=$('teacherTestTitle').value.trim()||'Test ze słówek';
+    wcTeacherGenerated=[...'ABCDEFG'].map(group=>{
+      const selected=wcTeacherShuffle(pairs).slice(0,count);
+      const sequence=wcTeacherShuffle(Array.from({length:count},(_,i)=>types[i%types.length]));
+      return {group,title,questions:selected.map((pair,i)=>['matching','numbers'].includes(sequence[i])?wcMakeMatching(sequence[i],pairs,direction):wcMakeTask(sequence[i],pair,pairs,direction))};
     });
-    preview.append(section);
-  });
-  $('teacherPrintTests').disabled = false;
-  $('teacherTestStatus').textContent = 'Gotowe! Utworzono 7 grup (A–G), po ' + count + ' pytań. Możesz wydrukować lub zapisać jako PDF.';
+    const preview=$('teacherTestPreview');preview.replaceChildren();
+    wcTeacherGenerated.forEach(test=>{
+      const section=wcEl('section');section.style.cssText='margin:18px 0;padding:20px;border:1px solid #ddd;border-radius:12px;';
+      section.append(wcEl('h3',test.title+' — Grupa '+test.group),wcEl('p','Imię i nazwisko: __________________________  Klasa: __________'));
+      test.questions.forEach((q,i)=>{const p=wcEl('p',wcTaskText(q,i));p.style.cssText='white-space:pre-wrap;line-height:1.8;margin:18px 0';section.append(p);});
+      preview.append(section);
+    });
+    $('teacherPrintTests').disabled=false;
+    $('teacherTestStatus').textContent='✅ Gotowe: 7 grup A–G, po '+count+' zadań. Kliknij Drukuj / PDF.';
+  }catch(e){$('teacherTestStatus').textContent='❌ '+e.message;}
 };
-$('teacherPrintTests').onclick = () => {
-  if (!user?.admin || !wcTeacherGenerated.length) return;
-  const popup = window.open('', '_blank');
-  if (!popup) return notice('Zezwól na wyskakujące okna, aby wydrukować test.');
-  const doc = popup.document;
-  doc.title = 'WordClass — testy A–G';
-  const style = doc.createElement('style');
-  style.textContent = '@page{size:A4;margin:16mm}body{font-family:Arial,sans-serif;color:#222}section{break-after:page;page-break-after:always}section:last-child{break-after:auto;page-break-after:auto}h2{color:#5645c7}p{margin:22px 0}button{padding:12px 20px;background:#5645c7;color:white;border:0;border-radius:8px}@media print{button{display:none}}';
-  doc.head.append(style);
-  const printButton = doc.createElement('button');
-  printButton.textContent = '🖨️ Drukuj / zapisz jako PDF';
-  printButton.onclick = () => popup.print();
-  doc.body.append(printButton);
-  wcTeacherGenerated.forEach(test => {
-    const section = doc.createElement('section');
-    section.append(wcEl('h2', 'WordClass — ' + test.title + ' — Grupa ' + test.group));
-    section.append(wcEl('p', 'Imię i nazwisko: __________________________  Klasa: __________'));
-    test.questions.forEach((q, i) => section.append(wcEl('p', (i + 1) + '. ' + q.question + '   ______________________________')));
-    doc.body.append(section);
+$('teacherPrintTests').onclick=()=>{
+  if(!user?.admin||!wcTeacherGenerated.length)return;
+  const popup=window.open('','_blank');if(!popup)return notice('Zezwól na wyskakujące okna.');
+  const doc=popup.document;doc.title='WordClass — testy A–G';
+  const style=doc.createElement('style');style.textContent='@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;color:#202537}section{break-after:page;page-break-after:always}section:last-child{break-after:auto}h2{color:#5645c7}p{white-space:pre-wrap;line-height:1.8;margin:18px 0}button{padding:12px 20px;background:#5645c7;color:white;border:0;border-radius:8px}@media print{button{display:none}}';doc.head.append(style);
+  const button=wcEl('button','🖨️ Drukuj / zapisz jako PDF');button.onclick=()=>popup.print();doc.body.append(button);
+  wcTeacherGenerated.forEach(test=>{
+    const section=wcEl('section');section.append(wcEl('h2','WordClass — '+test.title+' — Grupa '+test.group),wcEl('p','Imię i nazwisko: __________________________  Klasa: __________'));
+    test.questions.forEach((q,i)=>section.append(wcEl('p',wcTaskText(q,i))));doc.body.append(section);
   });
+  const key=wcEl('section');key.append(wcEl('h2','🔑 Klucz odpowiedzi — tylko dla nauczyciela'));
+  wcTeacherGenerated.forEach(test=>key.append(wcEl('p','Grupa '+test.group+'\n'+test.questions.map((q,i)=>(i+1)+'. '+wcTaskAnswer(q)).join('\n'))));
+  doc.body.append(key);
 };
 
 // ===== WordClass: drukowanie / usuwanie podglądu =====
