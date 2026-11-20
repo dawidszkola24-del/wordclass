@@ -598,6 +598,19 @@ function wcEnsureTeacherGeneratorPanel() {
 
 wcEnsureTeacherGeneratorPanel();
 buildAdminDashboard();
+// Tabela kont jest w HTML obok dziennika ocen. Przenosimy ją do kafelka Konta uczniów.
+(function wcPlaceAccountsTable() {
+  const table = $('accounts')?.closest('.tableWrap');
+  const accountsPanel = $('adminAccounts');
+  const printButton = $('printAccounts');
+  if (table && accountsPanel) {
+    if (printButton && printButton.parentElement === accountsPanel) {
+      printButton.after(table);
+    } else {
+      accountsPanel.append(table);
+    }
+  }
+})();
 buildStudentDashboard();
 
 show('home');
@@ -943,7 +956,7 @@ async function wcLoadStudents(){
     const actions=wcEl('td');
     const grades=wcEl('button','📊 Oceny');
     grades.type='button';
-    grades.onclick=()=>wcOpenGrades(s);
+    grades.onclick=()=>{openAdminSection('adminGrades');wcOpenGrades(s);};
     const reset=wcEl('button','🔑 Hasło');
     reset.type='button';reset.className='secondary';
     reset.onclick=()=>notice('Hasła ucznia '+(s.login||'')+' nie można odczytać. Bezpieczne ustawienie nowego hasła wymaga uruchomienia funkcji serwerowej Supabase. Nie wpisuj nowego hasła w tabeli ani w SQL.');
