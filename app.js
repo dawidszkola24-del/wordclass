@@ -1161,18 +1161,95 @@ function wcTeacherParse(){
   if(!pairs.length||pairs.length>100||pairs.some(p=>p.length!==2||!p.every(Boolean)))throw Error('Wpisz 1–100 par, np. apple - jabłko.');
   return pairs;
 }
-function wcTaskText(q,index){
-  const n=(index+1)+'. ';
-  if(q.type==='closed')return n+'Wybierz tłumaczenie: '+q.question+'\n'+q.choices.map((x,i)=>'   '+String.fromCharCode(65+i)+') '+x).join('     ');
-  if(q.type==='truefalse')return n+'Prawda czy fałsz? '+q.question+' — '+q.shown+'    ☐ Prawda    ☐ Fałsz';
-  if(q.type==='gaps')return n+'Uzupełnij tłumaczenie: '+q.question+' — __________________________';
-  if(q.type==='matching'||q.type==='numbers')return n+(q.type==='matching'?'Połącz w pary:':'Dopasuj liczby do liter:')+'\n'+q.left.map((x,i)=>'   '+(i+1)+'. '+x+'  ______').join('\n')+'\n'+q.right.map((x,i)=>'   '+String.fromCharCode(65+i)+'. '+x).join('\n');
-  return n+'Przetłumacz: '+q.question+'   __________________________';
+// Papierowe arkusze: edytowalne polecenia i punkty, układ dopasowań w dwóch kolumnach.
+const wcPaperKinds = ['Kartkówka','Sprawdzian','Test','Egzamin'];
+const wcDefaultInstructions = {
+  closed:'Wybierz poprawne tłumaczenie.',open:'Przetłumacz podane słowo.',
+  matching:'Połącz w pary.',numbers:'Dopasuj liczby do liter.',
+  gaps:'Uzupełnij brakujące tłumaczenie.',truefalse:'Zaznacz Prawda lub Fałsz.'
+};
+function wcSetupPaperOptions(){
+  const target=$('wcTaskTiles');
+  if(!target || $('wcPaperKind'))return;
+  const row=wcEl('div');row.style.cssText='margin:14px 0;padding:16px;border:1px solid #e0dff0;border-radius:14px;background:#f7f6ff';
+  const label=wcEl('label','📄 Rodzaj pracy do druku');label.style.cssText='display:block;font-weight:700;margin-bottom:7px';
+  const select=wcEl('select');select.id='wcPaperKind';
+  wcPaperKinds.forEach(name=>{const option=wcEl('option',name);option.value=name;select.append(option);});
+  row.append(label,select,wcEl('p','Po wygenerowaniu możesz edytować polecenia i punktację każdego zadania osobno. Domyślnie 1 punkt za poprawną odpowiedź.'));
+  target.before(row);
 }
+wcSetupPaperOptions();
+function wcPaperPoints(q){return (q.type==='matching'||q.type==='numbers')?q.left.length:1;}
+function wcPaperTotal(test){return test.questions.reduce((sum,q)=>sum+Number(q.points||0),0);}
 function wcTaskAnswer(q){
   if(q.type==='matching'||q.type==='numbers')return q.answers.map((x,i)=>(i+1)+'–'+String.fromCharCode(64+x)).join(', ');
   if(q.type==='closed')return String.fromCharCode(65+q.choices.indexOf(q.answer))+') '+q.answer;
   return q.answer;
+}
+function wcPaperTask(q,index){
+  const wrap=wcEl('div');wrap.className='wc-paper-task';
+  wrap.style.cssText='margin:17px 0 22px;break-inside:avoid;page-break-inside:avoid;';
+  const heading=wcEl('div');heading.style.cssText='display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:9px';
+  const title=wcEl('strong','Zadanie '+(index+1)+'. '+(q.instruction||wcDefaultInstructions[q.type]));
+  title.style.cssText='font-size:14px;white-space:pre-wrap';
+  const points=wcEl('strong',q.points+'p/');points.style.cssText='font-size:14px;white-space:nowrap';
+  heading.append(title,points);wrap.append(heading);
+  if(q.type==='matching'||q.type==='numbers'){
+    const grid=wcEl('div');grid.className='wc-paper-matching';
+    grid.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:24px;max-width:580px';
+    const left=wcEl('div'),right=wcEl('div');
+    q.left.forEach((x,i)=>{const line=wcEl('div',(i+1)+'. '+x+'   ______');line.style.cssText='margin:0 0 9px;overflow-wrap:anywhere';left.append(line);});
+    q.right.forEach((x,i)=>{const line=wcEl('div',String.fromCharCode(65+i)+'. '+x);line.style.cssText='margin:0 0 9px;overflow-wrap:anywhere';right.append(line);});
+    grid.append(left,right);wrap.append(grid);
+  }else if(q.type==='closed'){
+    wrap.append(wcEl('div',q.question));
+    const choices=wcEl('div');choices.style.cssText='display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:8px';
+    q.choices.forEach((x,i)=>choices.append(wcEl('span',String.fromCharCode(65+i)+') '+x)));
+    wrap.append(choices);
+  }else if(q.type==='truefalse'){
+    wrap.append(wcEl('div',q.question+' — '+q.shown+'     ☐ Prawda     ☐ Fałsz'));
+  }else{
+    wrap.append(wcEl('div',q.question+'   ______________________________'));
+  }
+  return wrap;
+}
+function wcPaperSheet(test,printMode){
+  const section=wcEl('section');section.className='wc-paper-sheet';
+  section.style.cssText=printMode?'break-after:page;page-break-after:always':'margin:18px 0;padding:20px;border:1px solid #dcddea;border-radius:12px;background:white;color:#202537';
+  const heading=wcEl('h2',test.kind+' — '+test.title+' — Grupa '+test.group);
+  heading.style.cssText='font-size:18px;margin:0 0 12px;color:#27233c';
+  section.append(heading,wcEl('p','Imię i nazwisko: ______________________________    Klasa: __________'));
+  const total=wcEl('p','Maksymalna liczba punktów: '+wcPaperTotal(test)+'p/     Uzyskane: ______p/');
+  total.style.cssText='font-weight:700;margin:12px 0 20px';section.append(total);
+  test.questions.forEach((q,i)=>section.append(wcPaperTask(q,i)));
+  return section;
+}
+function wcRenderPaperPreview(){
+  const preview=$('teacherTestPreview');preview.replaceChildren();
+  wcTeacherGenerated.forEach(test=>{
+    const section=wcPaperSheet(test,false);
+    const editor=wcEl('div');editor.style.cssText='border-top:1px solid #e0dff0;margin-top:16px;padding-top:14px';
+    const heading=wcEl('strong','✏️ Edytuj polecenia i punktację — grupa '+test.group);
+    editor.append(heading);
+    test.questions.forEach((q,i)=>{
+      const row=wcEl('div');row.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:10px;align-items:end;margin:10px 0';
+      const textLabel=wcEl('label','Zadanie '+(i+1)+' — polecenie');
+      const input=wcEl('textarea');input.rows=2;input.value=q.instruction;input.style.cssText='width:100%;box-sizing:border-box';
+      input.oninput=()=>{q.instruction=input.value;wcRefreshPaperSheet(section,test);};
+      textLabel.append(input);
+      const pointLabel=wcEl('label','Punkty');
+      const number=wcEl('input');number.type='number';number.min='0';number.max='100';number.step='1';number.value=q.points;
+      number.style.cssText='width:100%;box-sizing:border-box';
+      number.onchange=()=>{const value=Number(number.value);q.points=Number.isInteger(value)&&value>=0&&value<=100?value:wcPaperPoints(q);number.value=q.points;wcRefreshPaperSheet(section,test);};
+      pointLabel.append(number);row.append(textLabel,pointLabel);editor.append(row);
+    });
+    section.append(editor);preview.append(section);
+  });
+}
+function wcRefreshPaperSheet(section,test){
+  const fresh=wcPaperSheet(test,false);
+  const editor=section.lastElementChild;
+  section.replaceChildren(...Array.from(fresh.children),editor);
 }
 $('teacherMakeTests').onclick=()=>{
   if(!user?.admin)return notice('Zaloguj się jako administrator.');
@@ -1183,34 +1260,35 @@ $('teacherMakeTests').onclick=()=>{
     if(!wcChosenTasks.size)throw Error('Zaznacz przynajmniej jeden kolorowy kafelek.');
     const types=[...wcChosenTasks],direction=$('teacherTestDirection').value;
     const title=$('teacherTestTitle').value.trim()||'Test ze słówek';
+    const kind=$('wcPaperKind')?.value||'Test';
     wcTeacherGenerated=[...'ABCDEFG'].map(group=>{
       const selected=wcTeacherShuffle(pairs).slice(0,count);
       const sequence=wcTeacherShuffle(Array.from({length:count},(_,i)=>types[i%types.length]));
-      return {group,title,questions:selected.map((pair,i)=>['matching','numbers'].includes(sequence[i])?wcMakeMatching(sequence[i],pairs,direction):wcMakeTask(sequence[i],pair,pairs,direction))};
+      const questions=selected.map((pair,i)=>{
+        const q=['matching','numbers'].includes(sequence[i])?wcMakeMatching(sequence[i],pairs,direction):wcMakeTask(sequence[i],pair,pairs,direction);
+        q.instruction=wcDefaultInstructions[q.type];q.points=wcPaperPoints(q);return q;
+      });
+      return {group,title,kind,questions};
     });
-    const preview=$('teacherTestPreview');preview.replaceChildren();
-    wcTeacherGenerated.forEach(test=>{
-      const section=wcEl('section');section.style.cssText='margin:18px 0;padding:20px;border:1px solid #ddd;border-radius:12px;';
-      section.append(wcEl('h3',test.title+' — Grupa '+test.group),wcEl('p','Imię i nazwisko: __________________________  Klasa: __________'));
-      test.questions.forEach((q,i)=>{const p=wcEl('p',wcTaskText(q,i));p.style.cssText='white-space:pre-wrap;line-height:1.8;margin:18px 0';section.append(p);});
-      preview.append(section);
-    });
+    wcRenderPaperPreview();
     $('teacherPrintTests').disabled=false;
-    $('teacherTestStatus').textContent='✅ Gotowe: 7 grup A–G, po '+count+' zadań. Kliknij Drukuj / PDF.';
+    $('teacherTestStatus').textContent='✅ Gotowe: 7 grup A–G. Edytuj polecenia i punkty, a potem kliknij Drukuj / PDF.';
   }catch(e){$('teacherTestStatus').textContent='❌ '+e.message;}
 };
 $('teacherPrintTests').onclick=()=>{
   if(!user?.admin||!wcTeacherGenerated.length)return;
   const popup=window.open('','_blank');if(!popup)return notice('Zezwól na wyskakujące okna.');
-  const doc=popup.document;doc.title='WordClass — testy A–G';
-  const style=doc.createElement('style');style.textContent='@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;color:#202537}section{break-after:page;page-break-after:always}section:last-child{break-after:auto}h2{color:#5645c7}p{white-space:pre-wrap;line-height:1.8;margin:18px 0}button{padding:12px 20px;background:#5645c7;color:white;border:0;border-radius:8px}@media print{button{display:none}}';doc.head.append(style);
+  const doc=popup.document;doc.title='WordClass — arkusze A–G';
+  const style=doc.createElement('style');
+  style.textContent='@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;color:#202537;font-size:12px}section.wc-paper-sheet{break-after:page;page-break-after:always}section.wc-paper-sheet:last-of-type{break-after:page}h2{font-size:18px}p{margin:12px 0}button{padding:12px 20px;background:#5645c7;color:white;border:0;border-radius:8px;margin-bottom:18px}.wc-paper-task{break-inside:avoid;page-break-inside:avoid}@media print{button{display:none}}';
+  doc.head.append(style);
   const button=wcEl('button','🖨️ Drukuj / zapisz jako PDF');button.onclick=()=>popup.print();doc.body.append(button);
+  wcTeacherGenerated.forEach(test=>doc.body.append(wcPaperSheet(test,true)));
+  const key=wcEl('section');key.append(wcEl('h2','Klucz odpowiedzi — tylko dla nauczyciela'));
   wcTeacherGenerated.forEach(test=>{
-    const section=wcEl('section');section.append(wcEl('h2','WordClass — '+test.title+' — Grupa '+test.group),wcEl('p','Imię i nazwisko: __________________________  Klasa: __________'));
-    test.questions.forEach((q,i)=>section.append(wcEl('p',wcTaskText(q,i))));doc.body.append(section);
+    key.append(wcEl('h3','Grupa '+test.group+' — razem '+wcPaperTotal(test)+'p/'));
+    test.questions.forEach((q,i)=>key.append(wcEl('p','Zadanie '+(i+1)+' ('+q.points+'p/): '+wcTaskAnswer(q))));
   });
-  const key=wcEl('section');key.append(wcEl('h2','🔑 Klucz odpowiedzi — tylko dla nauczyciela'));
-  wcTeacherGenerated.forEach(test=>key.append(wcEl('p','Grupa '+test.group+'\n'+test.questions.map((q,i)=>(i+1)+'. '+wcTaskAnswer(q)).join('\n'))));
   doc.body.append(key);
 };
 
