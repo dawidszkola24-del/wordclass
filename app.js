@@ -1378,6 +1378,7 @@ $('teacherPrintTests').onclick=()=>{
     const h=wcEl('h2',(asKey?'KLUCZ ODPOWIEDZI — ':'')+test.kind+' — '+test.title+' — Grupa '+test.group);section.append(h);
     section.append(wcEl('p','Imię i nazwisko: __________________________    Klasa: __________'));
     section.append(wcEl('p','Razem: '+wcPaperTotal(test)+' pkt'+(asKey?'':'   |   Uzyskane: ______ pkt')));
+    if(test.gradeThresholds){section.append(wcEl('p','Progi ocen: '+wcGradeText(test.gradeThresholds)));if(!asKey)section.append(wcEl('p','Wynik: ______ %   |   Ocena: ______'));}
     test.questions.forEach((q,i)=>{
       const item=wcEl('div');item.className='wc-print-task';
       const heading=wcEl('div');heading.style.cssText='display:flex;justify-content:space-between;gap:12px';
@@ -1434,7 +1435,7 @@ $('teacherPrintTests').onclick=()=>{
           const picked=wcTeacherShuffle(pairs).slice(0,count);
           byGroup.set(group,picked.map((pair,i)=>createQuestion(sequence[i],pair,pairs,direction)));
         }
-        return {group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',questions:byGroup.get(group).map(q=>JSON.parse(JSON.stringify(q)))};
+        return {group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',gradeThresholds:wcGradeThresholds(),questions:byGroup.get(group).map(q=>JSON.parse(JSON.stringify(q)))};
       });
       renderPreview();$('teacherPrintTests').disabled=false;
       $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Uzupełnij zdania i odpowiedzi w nowych zadaniach przed drukiem.';
@@ -1453,6 +1454,25 @@ $('teacherPrintTests').onclick=()=>{
     else{wcTeacherGenerated.forEach(t=>doc.body.append(sheet(t,false)));wcTeacherGenerated.forEach(t=>doc.body.append(sheet(t,true)));}
   };
   // Wybór uczniów i przydział grup ONLINE wymaga osobnej aktualizacji uprawnień Supabase.
+})();
+
+// ===== WordClass: progi procentowe dla wydruku i testów online =====
+const wcGradeDefaults=[30,50,70,85,95]; // progi ocen 2,3,4,5,6
+function wcGradeThresholds(){
+  const vals=[2,3,4,5,6].map(g=>Number($('wcGrade'+g)?.value));
+  if(vals.some(v=>!Number.isInteger(v)||v<0||v>100)||vals.some((v,i)=>i&&v<=vals[i-1]))throw Error('Progi ocen muszą rosnąć i mieścić się w zakresie 0–100%.');
+  return vals;
+}
+function wcGradeText(t){return '1: 0–'+(t[0]-1)+'%  |  '+[2,3,4,5,6].map((g,i)=>g+': '+t[i]+'–'+(i<4?t[i+1]-1:100)+'%').join('  |  ');}
+(function wcBuildGradeTile(){
+  const anchor=$('wcTaskTiles');if(!anchor)return;
+  const tile=wcEl('section');tile.id='wcGradeTile';tile.style.cssText='margin:16px 0;padding:18px;border:2px solid #55a4d9;border-radius:16px;background:#eaf7ff;color:#1d3650';
+  tile.append(wcEl('h3','📊 Procenty i oceny — online i do druku'));
+  tile.append(wcEl('p','Ustal minimalny procent wymagany do otrzymania oceny. Ocena 1 obowiązuje poniżej progu na 2.'));
+  const grid=wcEl('div');grid.style.cssText='display:flex;flex-wrap:wrap;gap:12px';
+  [2,3,4,5,6].forEach((g,i)=>{const label=wcEl('label','Ocena '+g+' od (%)');label.style.cssText='display:flex;flex-direction:column;min-width:100px;flex:1';const input=wcEl('input');input.id='wcGrade'+g;input.type='number';input.min=0;input.max=100;input.step=1;input.value=wcGradeDefaults[i];label.append(input);grid.append(label);});
+  tile.append(grid);tile.append(wcEl('p','Wydruk: progi i miejsce na ocenę. Online: ocena zapisywana przez Supabase po oddaniu testu.'));
+  anchor.after(tile);
 })();
 
 // ===== WordClass: testy online (funkcje serwerowe Supabase) =====
@@ -1477,10 +1497,10 @@ function wcOnlineBuildUI() {
   const section = document.createElement('section');
   section.style.cssText = 'margin-top:28px;padding:18px;border:1px solid #ddd;border-radius:14px;';
   section.innerHTML = `
-    <h3>💻 Publikuj test / egzamin online</h3><p style="padding:10px;background:#fff3db;border-radius:8px">⚠️ Aktualnie publikacja online obejmuje całą wybraną klasę, a grupy są losowane. Wybór konkretnych uczniów i ręczne przydzielanie grup będzie możliwe po bezpiecznej aktualizacji Supabase.</p>
-    <p>Używa słówek i tytułu wpisanych wyżej. Uczeń dostaje losową grupę A–G. Ocena trafia do dziennika.</p>
+    <h3>💻 Publikuj test / egzamin online</h3>
+    <p>Zaznacz uczniów i przypisz im grupy A–G. Tylko zaznaczeni otrzymają test. Progi ocen ustaw w niebieskim kafelku powyżej.</p><p><strong>Uwaga:</strong> „Poprawa” oznacza osobny opublikowany test. Jeden opublikowany test można oddać tylko raz.</p>
     <label>Rodzaj <select id="wcOnlineKind"><option>Test</option><option>Egzamin</option></select></label>
-    <label>Klasa <select id="wcOnlineClass"></select></label>
+    <label>Klasa <select id="wcOnlineClass"></select></label><div id="wcOnlineRecipients" style="margin:12px 0;padding:12px;border:1px solid #dce3f4;border-radius:12px"></div>
     <label>Od kiedy <input id="wcOnlineFrom" type="datetime-local"></label>
     <label>Do kiedy <input id="wcOnlineTo" type="datetime-local"></label>
     <label>Minuty na rozwiązanie <input id="wcOnlineMinutes" type="number" min="1" max="180" value="15"></label>
@@ -1491,6 +1511,7 @@ function wcOnlineBuildUI() {
     <div id="wcOnlineAdminList"></div>`;
   panel.append(section);
   $('wcOnlinePublish').onclick = wcOnlinePublish;
+  $('wcOnlineClass').onchange=wcOnlineRenderRecipients;
   $('wcOnlineRefresh').onclick = wcOnlineAdminList;
   $('wcOnlineClearEnded').onclick = wcOnlineClearEnded;
   const origOpen = openAdminSection;
@@ -1516,6 +1537,24 @@ function wcOnlineBuildUI() {
   const origLogout = logout;
   logout = async function() { wcOnlineStopTimer(); wcOnlineActive=null; await origLogout(); };
 }
+const wcOnlineChosen=new Map();
+function wcOnlineRenderRecipients(){
+  const area=$('wcOnlineRecipients');if(!area)return;area.replaceChildren();
+  const list=wcStudents.filter(s=>String(s.class_id)===String($('wcOnlineClass').value));
+  area.append(wcEl('strong','☑️ Zaznacz uczniów, którzy mają otrzymać test'));
+  if(!list.length){area.append(wcEl('p','Brak uczniów w wybranej klasie.'));return;}
+  list.forEach(s=>{
+    if(!wcOnlineChosen.has(s.id))wcOnlineChosen.set(s.id,{checked:false,group:'A',term:'Pierwszy termin'});
+    const item=wcOnlineChosen.get(s.id),row=wcEl('div');row.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #e3e7f2';
+    const check=wcEl('input');check.type='checkbox';check.checked=item.checked;check.setAttribute('aria-label','Wybierz '+(s.full_name||s.login));
+    const name=wcEl('span',s.full_name||s.login);name.style.cssText='flex:1;min-width:130px';
+    const group=wcEl('select');'ABCDEFG'.split('').forEach(g=>{const op=wcEl('option','Grupa '+g);op.value=g;group.append(op);});group.value=item.group;
+    const term=wcEl('select');['Pierwszy termin','Poprawa'].forEach(v=>{const op=wcEl('option',v);op.value=v;term.append(op);});term.value=item.term;
+    const sync=()=>{group.disabled=!item.checked;term.disabled=!item.checked;};
+    check.onchange=()=>{item.checked=check.checked;sync();};group.onchange=()=>item.group=group.value;term.onchange=()=>item.term=term.value;sync();
+    row.append(check,name,group,term);area.append(row);
+  });
+}
 async function wcOnlinePublish() {
   if (!user?.admin) return;
   const button=$('wcOnlinePublish'); button.disabled=true;
@@ -1524,15 +1563,19 @@ async function wcOnlinePublish() {
     const start=$('wcOnlineFrom').value, end=$('wcOnlineTo').value;
     if (!start || !end) throw new Error('Ustaw datę i godzinę rozpoczęcia oraz zakończenia.');
     const count=Number($('teacherTestCount').value);
-    const id=await wcOnlineRpc('wc_online_create',{
+    const chosen=wcStudents.filter(s=>String(s.class_id)===String($('wcOnlineClass').value)&&wcOnlineChosen.get(s.id)?.checked).map(s=>({student_id:s.id,group:wcOnlineChosen.get(s.id).group,term:wcOnlineChosen.get(s.id).term}));
+    if(!chosen.length)throw Error('Zaznacz przynajmniej jednego ucznia.');
+    const grades=wcGradeThresholds();
+    const id=await wcOnlineRpc('wc_online_create_selected',{
       p_title:$('teacherTestTitle').value.trim()||'Test ze słówek',
       p_kind:$('wcOnlineKind').value,
       p_class_id:Number($('wcOnlineClass').value),
       p_start:new Date(start).toISOString(),p_end:new Date(end).toISOString(),
       p_minutes:Number($('wcOnlineMinutes').value),p_pairs:pairs,
-      p_count:count,p_direction:$('teacherTestDirection').value
+      p_count:count,p_direction:$('teacherTestDirection').value,
+      p_recipients:chosen,p_grade_thresholds:grades
     });
-    $('wcOnlineAdminStatus').textContent='✅ Opublikowano sprawdzian nr '+id+' dla wybranej klasy.';
+    $('wcOnlineAdminStatus').textContent='✅ Opublikowano test nr '+id+' dla '+chosen.length+' zaznaczonych uczniów.';
     await wcOnlineAdminList();
   } catch(e) { $('wcOnlineAdminStatus').textContent='❌ '+e.message; }
   finally { button.disabled=false; }
@@ -1542,7 +1585,8 @@ async function wcOnlineAdminList() {
   const select=$('wcOnlineClass'), previous=select.value;
   select.replaceChildren();
   classes.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.name;select.append(o);});
-  if (previous) select.value=previous;
+  if (previous && classes.some(c=>String(c.id)===String(previous))) select.value=previous;
+  wcOnlineRenderRecipients();
   const area=$('wcOnlineAdminList');area.textContent='Ładowanie…';
   try {
     const items=await wcOnlineRpc('wc_online_admin_list');area.replaceChildren();
