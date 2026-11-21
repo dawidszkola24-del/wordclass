@@ -1330,33 +1330,16 @@ $('teacherPrintTests').onclick=()=>{
   wcDefaultInstructions.grammar='Wpisz poprawną formę gramatyczną słowa z nawiasu.';
   const paperKind=$('wcPaperKind');
   const options=wcEl('section');options.id='wcIndividualOptions';options.style.cssText='margin:16px 0;padding:18px;border:1px solid #ddd;border-radius:14px;background:#f8f9ff';
-  options.innerHTML='<h3>👩‍🏫 Wybierz uczniów do wydruku</h3><p>Zaznacz tylko zdających lub poprawiających. Każdemu możesz przypisać grupę A–G. Dane uczniów są tylko odczytywane.</p><label>Klasa <select id="wcPaperClass"></select></label><div id="wcPaperStudents" style="margin:12px 0"></div><label>Drukowanie <select id="wcPaperPrintMode"><option value="paired">Arkusz, a po nim klucz odpowiedzi (2 strony na ucznia)</option><option value="separate">Najpierw arkusze, potem klucze</option></select></label><p style="font-size:13px">Dla zadań kontekstowych i gramatycznych wpisz własne poprawne zdania i odpowiedzi w edytorze po wygenerowaniu. Nie są tworzone losowe, błędne zdania.</p>';
+  options.innerHTML='<h3>🖨️ Wybierz grupy do druku / PDF</h3><p>Nie wybierasz uczniów. Zaznacz tylko grupy, które chcesz wygenerować.</p><div id="wcPaperGroups" style="display:flex;flex-wrap:wrap;gap:12px;margin:16px 0"></div><label>Drukowanie <select id="wcPaperPrintMode"><option value="paired">Każda grupa: arkusz, potem klucz</option><option value="separate">Najpierw arkusze, potem klucze</option></select></label><p style="font-size:13px">Zadania kontekstowe i gramatyczne wymagają wpisania poprawnych zdań i odpowiedzi w edytorze.</p>';
   paperKind?.parentElement?.after(options);
-  const selected=new Map();
-  function refreshClasses(){
-    const select=$('wcPaperClass');const previous=select.value;select.replaceChildren();
-    classes.forEach(c=>{const op=wcEl('option',c.name);op.value=String(c.id);select.append(op);});
-    if(classes.some(c=>String(c.id)===previous))select.value=previous;
-    refreshStudents();
-  }
-  function refreshStudents(){
-    const area=$('wcPaperStudents');area.replaceChildren();
-    const list=wcStudents.filter(s=>String(s.class_id)===String($('wcPaperClass').value));
-    if(!list.length){area.textContent='Brak uczniów w tej klasie. Zaloguj się i wybierz klasę.';return;}
-    list.forEach(s=>{
-      if(!selected.has(s.id))selected.set(s.id,{checked:false,group:'A',term:'Pierwszy termin'});
-      const data=selected.get(s.id),row=wcEl('div');row.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #e3e3ee';
-      const check=wcEl('input');check.type='checkbox';check.checked=data.checked;check.onchange=()=>data.checked=check.checked;
-      const name=wcEl('span',s.full_name||s.login);name.style.cssText='flex:1;min-width:110px';
-      const group=wcEl('select');'ABCDEFG'.split('').forEach(g=>{const op=wcEl('option','Grupa '+g);op.value=g;group.append(op);});group.value=data.group;group.onchange=()=>data.group=group.value;
-      const term=wcEl('select');['Pierwszy termin','Poprawa'].forEach(v=>{const op=wcEl('option',v);op.value=v;term.append(op);});term.value=data.term;term.onchange=()=>data.term=term.value;
-      row.append(check,name,group,term);area.append(row);
-    });
-  }
-  $('wcPaperClass').onchange=refreshStudents;
-  const origOpen=openAdminSection;
-  openAdminSection=function(id){origOpen(id);if(id==='adminTestGenerator')refreshClasses();};
-  function chosenStudents(){return wcStudents.filter(s=>String(s.class_id)===String($('wcPaperClass').value)&&selected.get(s.id)?.checked).map(s=>({...s,...selected.get(s.id)}));}
+  const selectedGroups=new Set(['A']);
+  const groupArea=$('wcPaperGroups');
+  'ABCDEFG'.split('').forEach(g=>{
+    const label=wcEl('label');label.style.cssText='display:inline-flex;align-items:center;gap:7px;padding:10px 14px;background:#fff;border:1px solid #dcddea;border-radius:10px;cursor:pointer';
+    const check=wcEl('input');check.type='checkbox';check.checked=selectedGroups.has(g);
+    check.onchange=()=>{if(check.checked)selectedGroups.add(g);else selectedGroups.delete(g);};
+    label.append(check,wcEl('strong','Grupa '+g));groupArea.append(label);
+  });
   function escapeHTML(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function createQuestion(type,pair,pairs,direction){
     let q;
@@ -1393,7 +1376,7 @@ $('teacherPrintTests').onclick=()=>{
   function sheet(test,asKey){
     const section=wcEl('section');section.className='wc-individual-sheet';
     const h=wcEl('h2',(asKey?'KLUCZ ODPOWIEDZI — ':'')+test.kind+' — '+test.title+' — Grupa '+test.group);section.append(h);
-    section.append(wcEl('p','Uczeń: '+test.studentName+'   |   Klasa: '+test.className+'   |   '+test.term));
+    section.append(wcEl('p','Imię i nazwisko: __________________________    Klasa: __________'));
     section.append(wcEl('p','Razem: '+wcPaperTotal(test)+' pkt'+(asKey?'':'   |   Uzyskane: ______ pkt')));
     test.questions.forEach((q,i)=>{
       const item=wcEl('div');item.className='wc-print-task';
@@ -1439,22 +1422,22 @@ $('teacherPrintTests').onclick=()=>{
   $('teacherMakeTests').onclick=()=>{
     if(!user?.admin)return notice('Zaloguj się jako administrator.');
     try{
-      const students=chosenStudents();if(!students.length)throw Error('Zaznacz co najmniej jednego ucznia z wybranej klasy.');
+      const groups=[...selectedGroups].sort();if(!groups.length)throw Error('Zaznacz co najmniej jedną grupę do druku.');
       const pairs=wcTeacherParse(),count=Number($('teacherTestCount').value);
       if(!Number.isInteger(count)||count<1||count>50||count>pairs.length)throw Error('Liczba zadań musi wynosić 1–50 i nie może przekraczać liczby słówek.');
       if(!wcChosenTasks.size)throw Error('Wybierz przynajmniej jeden kafelek zadania.');
       const types=[...wcChosenTasks],direction=$('teacherTestDirection').value;
       const byGroup=new Map();
-      wcTeacherGenerated=students.map(s=>{
-        if(!byGroup.has(s.group)){
+      wcTeacherGenerated=groups.map(group=>{
+        if(!byGroup.has(group)){
           const sequence=wcTeacherShuffle(Array.from({length:count},(_,i)=>types[i%types.length]));
           const picked=wcTeacherShuffle(pairs).slice(0,count);
-          byGroup.set(s.group,picked.map((pair,i)=>createQuestion(sequence[i],pair,pairs,direction)));
+          byGroup.set(group,picked.map((pair,i)=>createQuestion(sequence[i],pair,pairs,direction)));
         }
-        return {group:s.group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',studentName:s.full_name||s.login,className:classes.find(c=>String(c.id)===String(s.class_id))?.name||'',term:s.term,questions:byGroup.get(s.group).map(q=>JSON.parse(JSON.stringify(q)))};
+        return {group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',questions:byGroup.get(group).map(q=>JSON.parse(JSON.stringify(q)))};
       });
       renderPreview();$('teacherPrintTests').disabled=false;
-      $('teacherTestStatus').textContent='✅ Przygotowano '+wcTeacherGenerated.length+' arkuszy tylko dla zaznaczonych uczniów. Uzupełnij zdania i odpowiedzi w nowych zadaniach przed drukiem.';
+      $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Uzupełnij zdania i odpowiedzi w nowych zadaniach przed drukiem.';
     }catch(e){$('teacherTestStatus').textContent='❌ '+e.message;}
   };
   $('teacherPrintTests').onclick=()=>{
@@ -1462,14 +1445,14 @@ $('teacherPrintTests').onclick=()=>{
     const unfinished=wcTeacherGenerated.some(t=>t.questions.some(q=>(q.type==='context'||q.type==='grammar')&&q.lines.some(l=>!l.sentence.trim()||!l.hint.trim()||!l.answer.trim())));
     if(unfinished)return notice('Najpierw uzupełnij wszystkie zdania, podpowiedzi i prawidłowe odpowiedzi w zadaniach kontekstowych i gramatycznych.');
     const popup=window.open('','_blank');if(!popup)return notice('Zezwól na wyskakujące okna.');
-    const doc=popup.document;doc.title='WordClass — arkusze indywidualne';
+    const doc=popup.document;doc.title='WordClass — wybrane grupy';
     const style=doc.createElement('style');style.textContent='@page{size:A4;margin:13mm}body{font-family:Arial,sans-serif;color:#202537;font-size:12px}h2{font-size:17px;margin:0 0 10px}p{line-height:1.45}.wc-individual-sheet{break-after:page;page-break-after:always}.wc-individual-sheet:last-child{break-after:auto;page-break-after:auto}.wc-print-task{margin:14px 0 18px;break-inside:avoid;page-break-inside:avoid}button{padding:10px;background:#5545c7;color:white;border:0;border-radius:6px;margin-bottom:15px}@media print{button{display:none}}';doc.head.append(style);
     const btn=wcEl('button','🖨️ Drukuj / zapisz PDF');btn.onclick=()=>popup.print();doc.body.append(btn);
     const mode=$('wcPaperPrintMode').value;
     if(mode==='paired')wcTeacherGenerated.forEach(t=>{doc.body.append(sheet(t,false),sheet(t,true));});
     else{wcTeacherGenerated.forEach(t=>doc.body.append(sheet(t,false)));wcTeacherGenerated.forEach(t=>doc.body.append(sheet(t,true)));}
   };
-  // Wersja online nie jest zmieniana: wybór pojedynczych uczniów wymaga kontroli dostępu po stronie Supabase.
+  // Wybór uczniów i przydział grup ONLINE wymaga osobnej aktualizacji uprawnień Supabase.
 })();
 
 // ===== WordClass: testy online (funkcje serwerowe Supabase) =====
@@ -1494,7 +1477,7 @@ function wcOnlineBuildUI() {
   const section = document.createElement('section');
   section.style.cssText = 'margin-top:28px;padding:18px;border:1px solid #ddd;border-radius:14px;';
   section.innerHTML = `
-    <h3>💻 Publikuj test / egzamin online</h3>
+    <h3>💻 Publikuj test / egzamin online</h3><p style="padding:10px;background:#fff3db;border-radius:8px">⚠️ Aktualnie publikacja online obejmuje całą wybraną klasę, a grupy są losowane. Wybór konkretnych uczniów i ręczne przydzielanie grup będzie możliwe po bezpiecznej aktualizacji Supabase.</p>
     <p>Używa słówek i tytułu wpisanych wyżej. Uczeń dostaje losową grupę A–G. Ocena trafia do dziennika.</p>
     <label>Rodzaj <select id="wcOnlineKind"><option>Test</option><option>Egzamin</option></select></label>
     <label>Klasa <select id="wcOnlineClass"></select></label>
