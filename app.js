@@ -1354,7 +1354,7 @@ async function wcGuessDefinitions(words){
     {id:'grammar',name:'Forma gramatyczna',icon:'🔴',color:'#a52b42',bg:'#ffe5e9',desc:'Uzupełnij poprawną formę słowa'},
     {id:'guess',name:'Guess the Word ✨ AI',icon:'🧩',color:'#176d8a',bg:'#dff6ff',desc:'AI układa definicje A1–A2 z Twoich słówek'}
   ];
-  const taskGrid=$('wcTaskTiles')?.querySelector('div[style*="display:grid"]');
+  const taskGrid=Array.from($('wcTaskTiles')?.children || []).find(el => el.tagName === 'DIV' && el.style.display === 'grid');
   if(taskGrid){
     extraTypes.forEach(t=>{
       wcTaskTypes.push(t);
