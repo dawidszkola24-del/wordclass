@@ -615,33 +615,64 @@ buildStudentDashboard();
 
 show('home');
 
-$('generate').onclick = async () => {
-  if (!user?.admin) {
-    notice('Zaloguj się jako administrator.');
-    return;
+// Formularz tworzenia pojedynczego konta — bez zmian w pozostałych modułach.
+(function wcSetupNamedStudentForm() {
+  const generate = $('generate');
+  if (!generate || $('wcStudentFirstName')) return;
+  const form = document.createElement('div');
+  form.id = 'wcNamedStudentForm';
+  form.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:14px 0';
+  for (const [id, labelText, placeholder] of [
+    ['wcStudentFirstName', 'Imię ucznia', 'np. Jan'],
+    ['wcStudentLastName', 'Nazwisko ucznia', 'np. Kowalski']
+  ]) {
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    const input = document.createElement('input');
+    input.id = id;
+    input.type = 'text';
+    input.maxLength = 80;
+    input.autocomplete = 'off';
+    input.placeholder = placeholder;
+    input.required = true;
+    input.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin-top:5px';
+    label.append(input);
+    form.append(label);
   }
+  generate.before(form);
+  const countInput = $('count');
+  if (countInput) {
+    const countLabel = countInput.closest('label');
+    if (countLabel) countLabel.style.display = 'none';
+    else countInput.style.display = 'none';
+  }
+  generate.textContent = '👤 Generuj konto ucznia';
+})();
 
-  const count = Number($('count').value);
+function wcStudentLoginPart(value) {
+  return String(value || '').trim().toLocaleLowerCase('pl')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/ł/g, 'l').replace(/[^a-z0-9]/g, '');
+}
+
+$('generate').onclick = async () => {
+  if (!user?.admin) return notice('Zaloguj się jako administrator.');
+  const firstName = $('wcStudentFirstName').value.trim().replace(/\s+/g, ' ');
+  const lastName = $('wcStudentLastName').value.trim().replace(/\s+/g, ' ');
+  if (!firstName || !lastName) return notice('Wpisz imię i nazwisko ucznia.');
+  const login = wcStudentLoginPart(firstName) + '.' + wcStudentLoginPart(lastName);
+  if (!/^[a-z0-9]+\.[a-z0-9]+$/.test(login))
+    return notice('Podaj imię i nazwisko zawierające litery lub cyfry.');
   const classValue = $('generateClass')?.value;
   const classId = classValue ? Number(classValue) : null;
-
-  if (!Number.isInteger(count) || count < 1 || count > 50) {
-    notice('Podaj liczbę uczniów od 1 do 50.');
-    return;
-  }
-
   const button = $('generate');
   button.disabled = true;
-
   try {
     const { data: sessionData } = await db.auth.getSession();
     const token = sessionData.session?.access_token;
-
-    if (!token) {
-      notice('Sesja wygasła. Zaloguj się ponownie.');
-      return;
-    }
-
+    if (!token) return notice('Sesja wygasła. Zaloguj się ponownie.');
+    // Serwer musi potwierdzić obsługę nazwanych kont i sam wygenerować hasło.
+    // Bez tego nie tworzymy omyłkowo kont uczen1, uczen2 itd.
     const response = await fetch(
       'https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/wordclass-create-students',
       {
@@ -651,34 +682,27 @@ $('generate').onclick = async () => {
           'apikey': 'sb_publishable_lT_I31LEre8X0h3H5hAWtw_54mud94_',
           'Authorization': 'Bearer ' + token
         },
-        body: JSON.stringify({ count, classId })
+        body: JSON.stringify({ mode: 'named-student-v1', firstName, lastName, login, classId })
       }
     );
-
     const result = await response.json();
-
-    if (!response.ok || !result.success) {
-      notice(result.error || 'Nie udało się utworzyć kont.');
-      return;
+    if (!response.ok || result.success !== true) {
+      return notice(result.error || 'Nie udało się utworzyć konta. Sprawdź funkcję Supabase.');
     }
-
     const accounts = result.created || [];
-    const wybranaKlasa = classes.find(
-  item => item.id === classId
-);
-
-const nazwaKlasy = wybranaKlasa
-  ? wybranaKlasa.name
-  : 'Bez klasy';
-
-pokazTabeleKont(accounts, nazwaKlasy);
-
-   
-    wcLastPrint = {accounts, name: nazwaKlasy};
+    if (accounts.length !== 1 || !(accounts[0]?.login === login || new RegExp('^' + login.replace('.', '\\.') + '[2-9][0-9]*$').test(accounts[0]?.login || '')) ||
+        typeof accounts[0]?.password !== 'string' || accounts[0].password.length !== 6) {
+      await wcLoadStudents();
+      return notice('Serwer nie potwierdził poprawnego loginu i 6-znakowego hasła. Sprawdź funkcję Supabase przed kolejną próbą.');
+    }
+    const selectedClass = classes.find(item => item.id === classId);
+    const className = selectedClass ? selectedClass.name : 'Bez klasy';
+    wcLastPrint = { accounts, name: className };
+    pokazTabeleKont(accounts, className);
+    $('wcStudentFirstName').value = '';
+    $('wcStudentLastName').value = '';
     await wcLoadStudents();
-    notice('Utworzono ' + accounts.length + ' kont uczniów.');
-
-   
+    notice('Utworzono konto: ' + accounts[0].login + '. Zapisz lub wydrukuj hasło.');
   } catch (error) {
     notice('Błąd połączenia: ' + error.message);
   } finally {
