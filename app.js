@@ -1333,18 +1333,311 @@ $('teacherPrintTests').onclick=()=>{
   };
 })();
 
-// Definicje tworzy serwer (klucz AI nigdy nie trafia do przeglądarki).
+// Bezplatne definicje A1-A2. Wszystko dziala lokalnie, bez API i bez karty.
+const wcFreeGuessDictionary = {
+  "apple": "It is a fruit. It can be red or green.",
+  "banana": "It is a long yellow fruit.",
+  "orange": "It is a round fruit and also a colour.",
+  "pear": "It is a sweet fruit with a wide bottom and a narrow top.",
+  "lemon": "It is a yellow fruit with a sour taste.",
+  "strawberry": "It is a small red fruit with tiny seeds on the outside.",
+  "grape": "It is a small round fruit that grows in groups.",
+  "watermelon": "It is a large green fruit with red flesh inside.",
+  "fruit": "It is something sweet that grows on a tree or plant and you can eat it.",
+  "vegetable": "It is a plant or part of a plant that people eat, often with a meal.",
+  "potato": "It is a vegetable that grows under the ground. People make chips from it.",
+  "tomato": "It is a red fruit often used in salads and sauces.",
+  "carrot": "It is a long orange vegetable that grows under the ground.",
+  "onion": "It is a vegetable that can make your eyes water when you cut it.",
+  "bread": "It is food made from flour. You can make sandwiches with it.",
+  "cheese": "It is food made from milk. You can put it on pizza.",
+  "milk": "It is a white drink that comes from cows.",
+  "water": "It is a clear drink that people need every day.",
+  "juice": "It is a drink made from fruit or vegetables.",
+  "tea": "It is a hot drink made with leaves and water.",
+  "coffee": "It is a dark drink that many adults have in the morning.",
+  "egg": "It has a shell and comes from a chicken. You can cook it for breakfast.",
+  "rice": "It is a food made of small white grains.",
+  "pasta": "It is an Italian food made from flour and water, such as spaghetti.",
+  "pizza": "It is a round Italian food with cheese and tomato sauce.",
+  "soup": "It is a liquid food that you eat with a spoon.",
+  "cake": "It is a sweet food that people often eat on birthdays.",
+  "chocolate": "It is a sweet brown food made from cocoa.",
+  "sugar": "It is sweet and people put it in tea or cakes.",
+  "salt": "It is white and makes food taste less plain.",
+  "breakfast": "It is the first meal of the day.",
+  "lunch": "It is a meal people eat in the middle of the day.",
+  "dinner": "It is a meal people often eat in the evening.",
+  "dog": "It is an animal that can bark and is often a pet.",
+  "cat": "It is a pet that says meow and likes to sleep.",
+  "bird": "It is an animal with feathers and wings.",
+  "fish": "It is an animal that lives in water and has fins.",
+  "horse": "It is a large animal that people can ride.",
+  "cow": "It is a farm animal that gives milk.",
+  "pig": "It is a farm animal with a pink body and a short nose.",
+  "sheep": "It is a farm animal with thick wool.",
+  "chicken": "It is a farm bird that lays eggs.",
+  "duck": "It is a bird that swims and says quack.",
+  "rabbit": "It is a small animal with long ears.",
+  "mouse": "It is a small animal with a long tail. Cats often chase it.",
+  "lion": "It is a large wild cat with a loud roar.",
+  "tiger": "It is a large wild cat with orange fur and black stripes.",
+  "elephant": "It is a very large animal with a long trunk.",
+  "monkey": "It is an animal that can climb trees and has a long tail.",
+  "bear": "It is a large wild animal with thick fur.",
+  "snake": "It is a long animal with no legs.",
+  "frog": "It is a small animal that jumps and lives near water.",
+  "butterfly": "It is an insect with large colourful wings.",
+  "bee": "It is a small flying insect that makes honey.",
+  "spider": "It is a small animal with eight legs.",
+  "animal": "It is a living thing such as a dog, cat or bird.",
+  "pen": "You use it to write with ink on paper.",
+  "pencil": "You use it to write or draw, and you can erase its marks.",
+  "book": "It has pages and you read it.",
+  "notebook": "It is a book with empty pages for writing notes.",
+  "ruler": "You use it to measure length and draw straight lines.",
+  "eraser": "You use it to remove pencil marks.",
+  "bag": "You put things inside it and carry it.",
+  "backpack": "It is a bag that you carry on your back.",
+  "desk": "It is a piece of furniture where you can write or study.",
+  "chair": "It is furniture that one person sits on.",
+  "table": "It has a flat top and legs. You can eat or work at it.",
+  "board": "A teacher writes on it in a classroom.",
+  "school": "It is a place where children go to learn.",
+  "classroom": "It is a room where students have lessons.",
+  "teacher": "This person helps students learn at school.",
+  "student": "This person learns at school or university.",
+  "pupil": "This is a child who goes to school.",
+  "lesson": "It is a period of time when a teacher teaches students.",
+  "homework": "It is schoolwork that students do at home.",
+  "exam": "It is an important test of what you know.",
+  "test": "It is a set of questions to check what you know.",
+  "question": "It is something you ask when you want an answer.",
+  "answer": "It is what you say or write in reply to a question.",
+  "computer": "It is an electronic machine you use to work, study or play games.",
+  "laptop": "It is a small computer that you can carry.",
+  "phone": "You use it to call or send messages to people.",
+  "television": "You watch programmes and films on it.",
+  "radio": "You listen to music or news on it.",
+  "keyboard": "It has keys that you press to type on a computer.",
+  "screen": "It is the part of a computer or phone where you see pictures and words.",
+  "window": "It is made of glass and lets light into a room.",
+  "door": "You open it to enter or leave a room.",
+  "wall": "It is a vertical part of a building that separates rooms.",
+  "floor": "It is the part of a room that you walk on.",
+  "roof": "It is the top part of a house that keeps rain out.",
+  "house": "It is a building where people live.",
+  "home": "It is the place where you live.",
+  "room": "It is a part of a building with walls and a door.",
+  "kitchen": "It is the room where people cook food.",
+  "bathroom": "It is the room where people wash or take a shower.",
+  "bedroom": "It is the room where you sleep.",
+  "living room": "It is the room where a family relaxes and watches TV.",
+  "bed": "It is furniture that you sleep in.",
+  "sofa": "It is a long comfortable seat for two or more people.",
+  "lamp": "It gives light when a room is dark.",
+  "clock": "It tells you the time.",
+  "watch": "It means to look at something for a period of time.",
+  "mirror": "You look into it to see your face.",
+  "fridge": "It is a machine that keeps food cold.",
+  "oven": "It is a machine that cooks food using heat.",
+  "spoon": "You use it to eat soup.",
+  "fork": "You use it to pick up food when eating.",
+  "knife": "You use it to cut food.",
+  "plate": "You put food on it when you eat.",
+  "cup": "It is a small container for drinking tea or coffee.",
+  "glass": "It is a container you drink water or juice from.",
+  "bottle": "It is a container for liquids with a narrow top.",
+  "shirt": "It is clothing you wear on the upper part of your body.",
+  "t-shirt": "It is a casual top with short sleeves.",
+  "trousers": "You wear them on your legs. They have two long parts.",
+  "jeans": "They are trousers usually made from blue denim.",
+  "dress": "It is a piece of clothing that covers the body and hangs down over the legs.",
+  "skirt": "It is clothing that hangs from the waist and does not cover each leg separately.",
+  "shoes": "You wear them on your feet when you go outside.",
+  "socks": "You wear them on your feet inside shoes.",
+  "jacket": "It is clothing you wear over your top when it is cool outside.",
+  "coat": "It is warm clothing you wear over other clothes in cold weather.",
+  "hat": "You wear it on your head.",
+  "gloves": "You wear them on your hands to keep them warm.",
+  "scarf": "You wear it around your neck when it is cold.",
+  "red": "It is the colour of many tomatoes.",
+  "blue": "It is the colour of a clear sky.",
+  "green": "It is the colour of grass.",
+  "yellow": "It is the colour of a banana.",
+  "black": "It is the darkest colour.",
+  "white": "It is the colour of fresh snow.",
+  "pink": "It is a light red colour.",
+  "purple": "It is a colour made by mixing red and blue.",
+  "brown": "It is the colour of chocolate.",
+  "grey": "It is a colour between black and white.",
+  "big": "It means large in size.",
+  "small": "It means little in size.",
+  "tall": "It means having a great height.",
+  "short": "It means not tall or not long.",
+  "long": "It means having a lot of length.",
+  "fast": "It means moving quickly.",
+  "slow": "It means not moving quickly.",
+  "happy": "It is how you feel when something good happens.",
+  "sad": "It is how you feel when you are unhappy.",
+  "angry": "It is how you feel when you are very upset about something.",
+  "tired": "It is how you feel when you need to rest or sleep.",
+  "hungry": "It is how you feel when you want to eat.",
+  "thirsty": "It is how you feel when you want to drink.",
+  "cold": "It means having a low temperature.",
+  "hot": "It means having a high temperature.",
+  "sunny": "It describes weather when the sun is shining.",
+  "rainy": "It describes weather with a lot of rain.",
+  "windy": "It describes weather when the wind is strong.",
+  "snowy": "It describes weather with snow.",
+  "cloudy": "It describes weather when many clouds cover the sky.",
+  "sun": "It is the bright star that gives Earth light and heat.",
+  "moon": "You can often see it in the sky at night.",
+  "star": "It is a small bright point of light in the night sky.",
+  "sky": "It is the space above the Earth that you see when you look up.",
+  "river": "It is a long natural flow of water.",
+  "lake": "It is a large area of water surrounded by land.",
+  "sea": "It is a very large area of salt water.",
+  "beach": "It is a sandy place next to the sea.",
+  "mountain": "It is a very high area of land.",
+  "forest": "It is a large area with many trees.",
+  "tree": "It is a tall plant with a trunk and branches.",
+  "flower": "It is the colourful part of a plant.",
+  "grass": "It is a short green plant that covers the ground.",
+  "park": "It is a public green place where people walk or play.",
+  "city": "It is a large place where many people live and work.",
+  "town": "It is a place with houses and shops, smaller than a city.",
+  "village": "It is a small place where people live in the countryside.",
+  "street": "It is a road in a town or city with buildings along it.",
+  "road": "Cars and buses travel along it.",
+  "car": "It is a vehicle with four wheels that people drive.",
+  "bus": "It is a large road vehicle that carries many passengers.",
+  "train": "It is a vehicle that travels on railway tracks.",
+  "plane": "It is a vehicle that flies and carries passengers.",
+  "bicycle": "It is a vehicle with two wheels that you ride by pedalling.",
+  "bike": "It is a vehicle with two wheels that you ride by pedalling.",
+  "boat": "It is a small vehicle that travels on water.",
+  "ship": "It is a large vehicle that travels on water.",
+  "airport": "It is a place where planes take off and land.",
+  "station": "It is a place where trains or buses stop for passengers.",
+  "hospital": "It is a place where doctors and nurses care for sick people.",
+  "doctor": "This person helps people when they are ill.",
+  "nurse": "This person cares for people who are sick or hurt.",
+  "police officer": "This person helps keep people safe and follows the law.",
+  "firefighter": "This person puts out fires and rescues people.",
+  "shop": "It is a place where you buy things.",
+  "supermarket": "It is a large shop where you buy food and everyday things.",
+  "restaurant": "It is a place where you pay to eat a meal.",
+  "cinema": "It is a place where you watch films on a big screen.",
+  "library": "It is a place where you can borrow or read books.",
+  "museum": "It is a place where you see old or interesting objects.",
+  "football": "It is a sport where players kick a ball to score goals.",
+  "basketball": "It is a sport where players throw a ball into a high basket.",
+  "tennis": "It is a sport where players hit a ball over a net with rackets.",
+  "swimming": "It is the activity of moving through water using your body.",
+  "running": "It is the activity of moving quickly on foot.",
+  "dancing": "It is moving your body to music.",
+  "singing": "It is making music with your voice.",
+  "reading": "It is looking at written words and understanding them.",
+  "writing": "It is making letters or words on paper or a screen.",
+  "drawing": "It is making pictures with a pencil or pen.",
+  "music": "It is sound made by instruments or voices that people enjoy.",
+  "song": "It is a piece of music with words that people sing.",
+  "film": "It is a story shown as moving pictures on a screen.",
+  "movie": "It is a story shown as moving pictures on a screen.",
+  "game": "It is an activity you play for fun, often with rules.",
+  "friend": "It is a person you like and enjoy spending time with.",
+  "family": "It is a group of people related to each other.",
+  "mother": "She is a female parent.",
+  "father": "He is a male parent.",
+  "sister": "She is a female sibling.",
+  "brother": "He is a male sibling.",
+  "grandmother": "She is the mother of one of your parents.",
+  "grandfather": "He is the father of one of your parents.",
+  "child": "It is a young person who is not an adult.",
+  "baby": "It is a very young child.",
+  "people": "It is the plural word for person.",
+  "morning": "It is the early part of the day, before midday.",
+  "afternoon": "It is the part of the day after midday and before evening.",
+  "evening": "It is the part of the day after afternoon and before night.",
+  "night": "It is the dark part of the day when most people sleep.",
+  "today": "It means this day.",
+  "tomorrow": "It means the day after today.",
+  "yesterday": "It means the day before today.",
+  "week": "It is a period of seven days.",
+  "month": "It is one of the twelve parts of a year.",
+  "year": "It is a period of twelve months.",
+  "monday": "It is the first day of the working week.",
+  "tuesday": "It is the day after Monday.",
+  "wednesday": "It is the day between Tuesday and Thursday.",
+  "thursday": "It is the day before Friday.",
+  "friday": "It is the day before Saturday.",
+  "saturday": "It is the day after Friday.",
+  "sunday": "It is the day before Monday.",
+  "run": "It means to move quickly using your legs.",
+  "walk": "It means to move on foot without running.",
+  "jump": "It means to push yourself off the ground into the air.",
+  "swim": "It means to move through water using your arms and legs.",
+  "eat": "It means to put food into your mouth and swallow it.",
+  "drink": "It means to take liquid into your mouth and swallow it.",
+  "sleep": "It means to rest with your eyes closed, usually at night.",
+  "read": "It means to look at words and understand them.",
+  "write": "It means to make words using a pen, pencil or keyboard.",
+  "listen": "It means to pay attention to sounds.",
+  "speak": "It means to say words with your voice.",
+  "talk": "It means to speak to someone.",
+  "play": "It means to do something for fun or take part in a game.",
+  "work": "It means to do a job or task.",
+  "study": "It means to spend time learning something.",
+  "learn": "It means to get knowledge or a new skill.",
+  "teach": "It means to help someone learn something.",
+  "help": "It means to make something easier for another person.",
+  "buy": "It means to get something by paying money.",
+  "sell": "It means to give something to someone in exchange for money.",
+  "open": "It means to move a door or container so you can go in or see inside.",
+  "close": "It means to shut something.",
+  "start": "It means to begin doing something.",
+  "finish": "It means to complete something.",
+  "like": "It means to enjoy something or think it is good.",
+  "love": "It means to feel very strong affection for someone or something.",
+  "hate": "It means to dislike something very much.",
+  "need": "It means to have to have something.",
+  "want": "It means to wish to have or do something.",
+  "know": "It means to have information in your mind.",
+  "think": "It means to use your mind to form ideas.",
+  "see": "It means to notice something with your eyes.",
+  "look": "It means to turn your eyes towards something.",
+  "hear": "It means to notice a sound with your ears.",
+  "find": "It means to discover where something is.",
+  "lose": "It means to stop having something because you cannot find it.",
+  "give": "It means to let someone have something.",
+  "take": "It means to move something into your hand or carry it away.",
+  "make": "It means to create or produce something.",
+  "do": "It means to perform an action or activity.",
+  "go": "It means to move from one place to another.",
+  "come": "It means to move towards the person who is speaking.",
+  "get": "It means to receive or obtain something.",
+  "have": "It means to own or possess something.",
+  "be": "It means to exist or have a particular state.",
+  "can": "It means to be able to do something."
+};
 async function wcGuessDefinitions(words){
-  const {data}=await db.auth.getSession();
-  const token=data.session?.access_token;
-  if(!token)throw Error('Zaloguj się ponownie jako administrator.');
-  const response=await fetch('https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/wordclass-ai-definitions',{
-    method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,
-    'apikey':'sb_publishable_lT_I31LEre8X0h3H5hAWtw_54mud94_'},body:JSON.stringify({words})
-  });
-  const result=await response.json().catch(()=>({}));
-  if(!response.ok||!result.success)throw Error(result.error||'Nie udało się wygenerować definicji AI.');
-  return result.definitions;
+  const definitions={};
+  const missing=[];
+  for(const word of words){
+    const key=String(word).trim().toLowerCase();
+    if(wcFreeGuessDictionary[key])definitions[key]=wcFreeGuessDictionary[key];
+    else missing.push(word);
+  }
+  if(missing.length){
+    // Nauczyciel moze dopisac definicje do slowa, ktorego nie ma w slowniku.
+    for(const word of missing){
+      const definition=window.prompt('Brak gotowej definicji dla: '+word+'\nWpisz prosta definicje po angielsku (bez podawania slowa).\nAnuluj = przerwij generowanie.');
+      if(!definition || !definition.trim())throw Error('Brak definicji dla: '+word+'. Generowanie przerwane.');
+      definitions[String(word).trim().toLowerCase()]=definition.trim();
+    }
+  }
+  return definitions;
 }
 
 // ===== WordClass: indywidualne arkusze i nowe typy zadań (tylko wydruk) =====
@@ -1352,7 +1645,7 @@ async function wcGuessDefinitions(words){
   const extraTypes=[
     {id:'context',name:'Polskie słowo → luka EN',icon:'🟡',color:'#936100',bg:'#fff5c9',desc:'Zdanie angielskie i polska podpowiedź'},
     {id:'grammar',name:'Forma gramatyczna',icon:'🔴',color:'#a52b42',bg:'#ffe5e9',desc:'Uzupełnij poprawną formę słowa'},
-    {id:'guess',name:'Guess the Word ✨ AI',icon:'🧩',color:'#176d8a',bg:'#dff6ff',desc:'AI układa definicje A1–A2 z Twoich słówek'}
+    {id:'guess',name:'Guess the Word 🧩 GRATIS',icon:'🧩',color:'#176d8a',bg:'#dff6ff',desc:'Darmowe definicje A1–A2, bez AI i bez opłat'}
   ];
   const taskGrid=Array.from($('wcTaskTiles')?.children || []).find(el => el.tagName === 'DIV' && el.style.display === 'grid');
   if(taskGrid){
@@ -1457,6 +1750,12 @@ async function wcGuessDefinitions(words){
         wrap.append(wcEl('strong','Zadanie '+(i+1)));
         const instruction=wcEl('textarea');instruction.rows=2;instruction.value=q.instruction;instruction.style.width='100%';instruction.oninput=()=>{q.instruction=instruction.value;refresh();};
         wrap.append(wcEl('label','Polecenie'),instruction);
+        if(q.type==='guess'){
+          const definition=wcEl('textarea');definition.rows=2;definition.value=q.question;
+          definition.style.width='100%';definition.oninput=()=>{q.question=definition.value;refresh();};
+          wrap.append(wcEl('label','Definicja po angielsku (możesz poprawić)'),definition);
+        }
+
         const points=wcEl('input');points.type='number';points.min=0;points.max=100;points.value=q.points;points.onchange=()=>{q.points=Math.max(0,Math.min(100,Number(points.value)||0));refresh();};
         wrap.append(wcEl('label','Punkty '),points);
         if(q.lines&&(q.type==='context'||q.type==='grammar')){
@@ -1494,12 +1793,12 @@ async function wcGuessDefinitions(words){
         return {group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',gradeThresholds:wcGradeThresholds(),questions:byGroup.get(group).map(q=>JSON.parse(JSON.stringify(q)))};
       });
       if(types.includes('guess')){
-        $('teacherTestStatus').textContent='✨ AI przygotowuje definicje A1–A2…';
+        $('teacherTestStatus').textContent='🧩 Przygotowuję darmowe definicje A1–A2…';
         const words=[...new Set(wcTeacherGenerated.flatMap(t=>t.questions.filter(q=>q.type==='guess').map(q=>q.answer)))];
         const definitions=await wcGuessDefinitions(words);
         wcTeacherGenerated.forEach(t=>t.questions.filter(q=>q.type==='guess').forEach(q=>{
           const found=definitions[q.answer.toLowerCase()];
-          if(!found)throw Error('AI nie przygotowało definicji dla: '+q.answer);
+          if(!found)throw Error('Brak definicji dla: '+q.answer);
           q.question=found;
         }));
       }
