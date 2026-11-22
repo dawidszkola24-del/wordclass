@@ -1333,11 +1333,26 @@ $('teacherPrintTests').onclick=()=>{
   };
 })();
 
+// Definicje tworzy serwer (klucz AI nigdy nie trafia do przeglądarki).
+async function wcGuessDefinitions(words){
+  const {data}=await db.auth.getSession();
+  const token=data.session?.access_token;
+  if(!token)throw Error('Zaloguj się ponownie jako administrator.');
+  const response=await fetch('https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/wordclass-ai-definitions',{
+    method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,
+    'apikey':'sb_publishable_lT_I31LEre8X0h3H5hAWtw_54mud94_'},body:JSON.stringify({words})
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok||!result.success)throw Error(result.error||'Nie udało się wygenerować definicji AI.');
+  return result.definitions;
+}
+
 // ===== WordClass: indywidualne arkusze i nowe typy zadań (tylko wydruk) =====
 (function wcIndividualPaperUpgrade(){
   const extraTypes=[
     {id:'context',name:'Polskie słowo → luka EN',icon:'🟡',color:'#936100',bg:'#fff5c9',desc:'Zdanie angielskie i polska podpowiedź'},
-    {id:'grammar',name:'Forma gramatyczna',icon:'🔴',color:'#a52b42',bg:'#ffe5e9',desc:'Uzupełnij poprawną formę słowa'}
+    {id:'grammar',name:'Forma gramatyczna',icon:'🔴',color:'#a52b42',bg:'#ffe5e9',desc:'Uzupełnij poprawną formę słowa'},
+    {id:'guess',name:'Guess the Word ✨ AI',icon:'🧩',color:'#176d8a',bg:'#dff6ff',desc:'AI układa definicje A1–A2 z Twoich słówek'}
   ];
   const taskGrid=$('wcTaskTiles')?.querySelector('div[style*="display:grid"]');
   if(taskGrid){
@@ -1346,12 +1361,13 @@ $('teacherPrintTests').onclick=()=>{
       const tile=wcEl('button');tile.type='button';tile.style.cssText='display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-height:120px;padding:16px;border-radius:16px;white-space:normal;cursor:pointer';
       const head=wcEl('strong',t.icon+' '+t.name),sub=wcEl('small',t.desc),mark=wcEl('small');tile.append(head,sub,mark);
       const paint=()=>{const active=wcChosenTasks.has(t.id);tile.style.background=t.bg;tile.style.color=t.color;tile.style.border=(active?'3px solid '+t.color:'2px solid #dfe2eb');mark.textContent=active?'✓ ZAZNACZONE':'○ Wybierz';};
-      tile.onclick=()=>{wcChosenTasks.has(t.id)?wcChosenTasks.delete(t.id):wcChosenTasks.add(t.id);paint();const counter=$('wcTaskTiles').querySelector('p[style*="font-weight"]');if(counter)counter.textContent='Wybrano: '+wcChosenTasks.size+' z 8';};
+      tile.onclick=()=>{wcChosenTasks.has(t.id)?wcChosenTasks.delete(t.id):wcChosenTasks.add(t.id);paint();const counter=$('wcTaskTiles').querySelector('p[style*="font-weight"]');if(counter)counter.textContent='Wybrano: '+wcChosenTasks.size+' z '+wcTaskTypes.length;};
       paint();taskGrid.append(tile);
     });
   }
   wcDefaultInstructions.context='Wpisz angielskie słowo z polskiej podpowiedzi w poprawnej formie.';
   wcDefaultInstructions.grammar='Wpisz poprawną formę gramatyczną słowa z nawiasu.';
+  wcDefaultInstructions.guess='Read the definition and guess the word.';
   const paperKind=$('wcPaperKind');
   const options=wcEl('section');options.id='wcIndividualOptions';options.style.cssText='margin:16px 0;padding:18px;border:1px solid #ddd;border-radius:14px;background:#f8f9ff';
   options.innerHTML='<h3>🖨️ Wybierz grupy do druku / PDF</h3><p>Nie wybierasz uczniów. Zaznacz tylko grupy, które chcesz wygenerować.</p><div id="wcPaperGroups" style="display:flex;flex-wrap:wrap;gap:12px;margin:16px 0"></div><label>Drukowanie <select id="wcPaperPrintMode"><option value="paired">Każda grupa: arkusz, potem klucz</option><option value="separate">Najpierw arkusze, potem klucze</option></select></label><p style="font-size:13px">Zadania kontekstowe i gramatyczne wymagają wpisania poprawnych zdań i odpowiedzi w edytorze.</p>';
@@ -1367,7 +1383,9 @@ $('teacherPrintTests').onclick=()=>{
   function escapeHTML(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function createQuestion(type,pair,pairs,direction){
     let q;
-    if(type==='context'||type==='grammar'){
+    if(type==='guess'){
+      q={type,question:'',answer:pair[0],instruction:wcDefaultInstructions.guess,points:1};
+    }else if(type==='context'||type==='grammar'){
       q={type,question:'',answer:'',hint:type==='context'?pair[1]:pair[0],instruction:wcDefaultInstructions[type],points:3,
         lines:Array.from({length:3},(_,i)=>({sentence:'',hint:i===0?(type==='context'?pair[1]:pair[0]):'',answer:''}))};
     }else{
@@ -1383,7 +1401,12 @@ $('teacherPrintTests').onclick=()=>{
   }
   function taskContent(q){
     const box=wcEl('div');
-    if(q.type==='context'||q.type==='grammar'){
+    if(q.type==='guess'){
+      box.append(wcEl('p','Definition: '+(q.question||'[Definition unavailable]')));
+      const blanks=wcEl('div');blanks.style.cssText='display:flex;flex-wrap:wrap;gap:5px;margin:12px 0';
+      Array.from(q.answer).forEach(ch=>{const cell=wcEl('span',ch===' '?' ': '');cell.style.cssText=ch===' '?'width:12px':'width:25px;height:30px;border:1.5px solid #64748b;border-radius:4px;display:inline-block;text-align:center';blanks.append(cell);});
+      box.append(blanks);
+    }else if(q.type==='context'||q.type==='grammar'){
       q.lines.forEach((line,i)=>{const p=wcEl('p',(i+1)+'. '+(line.sentence||'____________________________')+'  ('+(line.hint||'podpowiedź')+')');p.style.margin='9px 0';box.append(p);});
     }else if(q.type==='truefalse'&&q.lines){
       q.lines.forEach((line,i)=>{const p=wcEl('p',(i+1)+'. '+line.sentence+'      ☐ P     ☐ F');p.style.margin='9px 0';box.append(p);});
@@ -1406,13 +1429,21 @@ $('teacherPrintTests').onclick=()=>{
     test.questions.forEach((q,i)=>{
       const item=wcEl('div');item.className='wc-print-task';
       const heading=wcEl('div');heading.style.cssText='display:flex;justify-content:space-between;gap:12px';
-      heading.append(wcEl('strong','Zadanie '+(i+1)+'. '+q.instruction),wcEl('strong',q.points+'p/'));item.append(heading);
+      heading.style.borderBottom='2px solid #334155';heading.style.paddingBottom='7px';heading.style.marginBottom='12px';
+      heading.append(wcEl('strong','TASK '+(i+1)+' — '+q.instruction),wcEl('strong',q.points+' pt'));item.append(heading);
       if(asKey){
         if(q.lines)item.append(wcEl('p',q.lines.map((l,j)=>(j+1)+'. '+(l.answer||'[nie wpisano odpowiedzi]')).join(' | ')));
         else item.append(wcEl('p',wcTaskAnswer(q)));
       }else item.append(taskContent(q));
       section.append(item);
     });
+    if(!asKey){
+      const results=wcEl('div');results.style.cssText='margin-top:24px;border:2px solid #334155;border-radius:9px;padding:13px;break-inside:avoid';
+      results.append(wcEl('strong','TEST RESULTS'));
+      results.append(wcEl('p','Total score: ______ / '+wcPaperTotal(test)+' points     Percentage: ______ %'));
+      results.append(wcEl('p','Final grade:  ◯ 1   ◯ 2   ◯ 3   ◯ 4   ◯ 5   ◯ 6'));
+      section.append(results);
+    }
     return section;
   }
   function renderPreview(){
@@ -1444,8 +1475,9 @@ $('teacherPrintTests').onclick=()=>{
       panel.append(editor);preview.append(panel);
     });
   }
-  $('teacherMakeTests').onclick=()=>{
+  $('teacherMakeTests').onclick=async()=>{
     if(!user?.admin)return notice('Zaloguj się jako administrator.');
+    const generateButton=$('teacherMakeTests');generateButton.disabled=true;
     try{
       const groups=[...selectedGroups].sort();if(!groups.length)throw Error('Zaznacz co najmniej jedną grupę do druku.');
       const pairs=wcTeacherParse(),count=Number($('teacherTestCount').value);
@@ -1461,9 +1493,20 @@ $('teacherPrintTests').onclick=()=>{
         }
         return {group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',gradeThresholds:wcGradeThresholds(),questions:byGroup.get(group).map(q=>JSON.parse(JSON.stringify(q)))};
       });
+      if(types.includes('guess')){
+        $('teacherTestStatus').textContent='✨ AI przygotowuje definicje A1–A2…';
+        const words=[...new Set(wcTeacherGenerated.flatMap(t=>t.questions.filter(q=>q.type==='guess').map(q=>q.answer)))];
+        const definitions=await wcGuessDefinitions(words);
+        wcTeacherGenerated.forEach(t=>t.questions.filter(q=>q.type==='guess').forEach(q=>{
+          const found=definitions[q.answer.toLowerCase()];
+          if(!found)throw Error('AI nie przygotowało definicji dla: '+q.answer);
+          q.question=found;
+        }));
+      }
       renderPreview();$('teacherPrintTests').disabled=false;
       $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Uzupełnij zdania i odpowiedzi w nowych zadaniach przed drukiem.';
-    }catch(e){$('teacherTestStatus').textContent='❌ '+e.message;}
+    }catch(e){wcTeacherGenerated=[];$('teacherPrintTests').disabled=true;$('teacherTestStatus').textContent='❌ '+e.message;}
+    finally{generateButton.disabled=false;}
   };
   $('teacherPrintTests').onclick=()=>{
     if(!user?.admin||!wcTeacherGenerated.length)return;
@@ -1583,6 +1626,7 @@ async function wcOnlinePublish() {
   if (!user?.admin) return;
   const button=$('wcOnlinePublish'); button.disabled=true;
   try {
+    if(wcChosenTasks.has('guess'))throw Error('Guess the Word online wymaga aktualizacji funkcji SQL oceniania. Na razie użyj go do druku/PDF.');
     const pairs=wcOnlineParsePairs();
     const start=$('wcOnlineFrom').value, end=$('wcOnlineTo').value;
     if (!start || !end) throw new Error('Ustaw datę i godzinę rozpoczęcia oraz zakończenia.');
