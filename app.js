@@ -1622,20 +1622,35 @@ const wcFreeGuessDictionary = {
   "can": "It means to be able to do something."
 };
 async function wcGuessDefinitions(words){
+  // Definicje tworzy Gemini przez bezpieczną funkcję Supabase.
+  // Nigdy nie prosimy nauczyciela o ręczne wpisywanie definicji.
+  const {data, error: sessionError}=await db.auth.getSession();
+  const token=data?.session?.access_token;
+  if(sessionError || !token)throw Error('Zaloguj się ponownie jako administrator.');
+  const response=await fetch('https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/wordclass-ai-definitions',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+token,
+      'apikey':'sb_publishable_lT_I31LEre8X0h3H5hAWtw_54mud94_'
+    },
+    body:JSON.stringify({words})
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok || result.success!==true){
+    throw Error(result.error || 'Gemini nie odpowiedziało (HTTP '+response.status+').');
+  }
+  if(!result.definitions || typeof result.definitions!=='object' || Array.isArray(result.definitions)){
+    throw Error('Gemini nie zwróciło poprawnych definicji.');
+  }
   const definitions={};
-  const missing=[];
   for(const word of words){
     const key=String(word).trim().toLowerCase();
-    if(wcFreeGuessDictionary[key])definitions[key]=wcFreeGuessDictionary[key];
-    else missing.push(word);
-  }
-  if(missing.length){
-    // Nauczyciel moze dopisac definicje do slowa, ktorego nie ma w slowniku.
-    for(const word of missing){
-      const definition=window.prompt('Brak gotowej definicji dla: '+word+'\nWpisz prosta definicje po angielsku (bez podawania slowa).\nAnuluj = przerwij generowanie.');
-      if(!definition || !definition.trim())throw Error('Brak definicji dla: '+word+'. Generowanie przerwane.');
-      definitions[String(word).trim().toLowerCase()]=definition.trim();
+    const definition=result.definitions[key];
+    if(typeof definition!=='string' || !definition.trim()){
+      throw Error('Gemini nie przygotowało definicji dla: '+word+'. Spróbuj ponownie.');
     }
+    definitions[key]=definition.trim();
   }
   return definitions;
 }
@@ -1645,7 +1660,7 @@ async function wcGuessDefinitions(words){
   const extraTypes=[
     {id:'context',name:'Polskie słowo → luka EN',icon:'🟡',color:'#936100',bg:'#fff5c9',desc:'Zdanie angielskie i polska podpowiedź'},
     {id:'grammar',name:'Forma gramatyczna',icon:'🔴',color:'#a52b42',bg:'#ffe5e9',desc:'Uzupełnij poprawną formę słowa'},
-    {id:'guess',name:'Guess the Word 🧩 GRATIS',icon:'🧩',color:'#176d8a',bg:'#dff6ff',desc:'Darmowe definicje A1–A2, bez AI i bez opłat'}
+    {id:'guess',name:'Guess the Word ✨ Gemini',icon:'🧩',color:'#176d8a',bg:'#dff6ff',desc:'Definicje A1–A2 tworzone automatycznie przez Gemini (darmowy limit)'}
   ];
   const taskGrid=Array.from($('wcTaskTiles')?.children || []).find(el => el.tagName === 'DIV' && el.style.display === 'grid');
   if(taskGrid){
@@ -1793,7 +1808,7 @@ async function wcGuessDefinitions(words){
         return {group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',gradeThresholds:wcGradeThresholds(),questions:byGroup.get(group).map(q=>JSON.parse(JSON.stringify(q)))};
       });
       if(types.includes('guess')){
-        $('teacherTestStatus').textContent='🧩 Przygotowuję darmowe definicje A1–A2…';
+        $('teacherTestStatus').textContent='🧩 Gemini generuje definicje A1–A2…';
         const words=[...new Set(wcTeacherGenerated.flatMap(t=>t.questions.filter(q=>q.type==='guess').map(q=>q.answer)))];
         const definitions=await wcGuessDefinitions(words);
         wcTeacherGenerated.forEach(t=>t.questions.filter(q=>q.type==='guess').forEach(q=>{
