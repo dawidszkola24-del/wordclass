@@ -1655,6 +1655,33 @@ async function wcGuessDefinitions(words){
   return definitions;
 }
 
+// Gemini: automatyczne zdania z lukami (ten sam bezpieczny endpoint Supabase).
+async function wcGeminiSentences(items){
+  const {data,error}=await db.auth.getSession();
+  const token=data?.session?.access_token;
+  if(error||!token)throw Error('Zaloguj się ponownie jako administrator.');
+  const all=[];
+  for(let start=0;start<items.length;start+=12){
+    const batch=items.slice(start,start+12);
+    const response=await fetch('https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/wordclass-ai-definitions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':'sb_publishable_lT_I31LEre8X0h3H5hAWtw_54mud94_'},
+      body:JSON.stringify({mode:'sentences',items:batch})
+    });
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok||result.success!==true)throw Error(result.error||'Nie udało się wygenerować zdań (HTTP '+response.status+').');
+    if(!Array.isArray(result.sentences))throw Error('Zaktualizuj funkcję wordclass-ai-definitions w Supabase: brakuje obsługi zdań.');
+    for(const requested of batch){
+      const entry=result.sentences.find(x=>x.id===requested.id);
+      if(!entry||!Array.isArray(entry.lines)||entry.lines.length!==3)throw Error('Gemini nie przygotowało 3 zdań dla: '+requested.word);
+      const lines=entry.lines.map(line=>({sentence:String(line.sentence||'').trim(),hint:String(line.hint||'').trim(),answer:String(line.answer||'').trim()}));
+      if(lines.some(l=>!l.sentence.includes('____')||!l.hint||!l.answer))throw Error('Gemini zwróciło niepełne zdania dla: '+requested.word);
+      all.push({id:requested.id,lines});
+    }
+  }
+  return all;
+}
+
 // ===== WordClass: indywidualne arkusze i nowe typy zadań (tylko wydruk) =====
 (function wcIndividualPaperUpgrade(){
   const extraTypes=[
@@ -1678,7 +1705,7 @@ async function wcGuessDefinitions(words){
   wcDefaultInstructions.guess='Read the definition and guess the word.';
   const paperKind=$('wcPaperKind');
   const options=wcEl('section');options.id='wcIndividualOptions';options.style.cssText='margin:16px 0;padding:18px;border:1px solid #ddd;border-radius:14px;background:#f8f9ff';
-  options.innerHTML='<h3>🖨️ Wybierz grupy do druku / PDF</h3><p>Nie wybierasz uczniów. Zaznacz tylko grupy, które chcesz wygenerować.</p><div id="wcPaperGroups" style="display:flex;flex-wrap:wrap;gap:12px;margin:16px 0"></div><label>Drukowanie <select id="wcPaperPrintMode"><option value="paired">Każda grupa: arkusz, potem klucz</option><option value="separate">Najpierw arkusze, potem klucze</option></select></label><p style="font-size:13px">Zadania kontekstowe i gramatyczne wymagają wpisania poprawnych zdań i odpowiedzi w edytorze.</p>';
+  options.innerHTML='<h3>🖨️ Wybierz grupy do druku / PDF</h3><p>Nie wybierasz uczniów. Zaznacz tylko grupy, które chcesz wygenerować.</p><div id="wcPaperGroups" style="display:flex;flex-wrap:wrap;gap:12px;margin:16px 0"></div><label>Drukowanie <select id="wcPaperPrintMode"><option value="paired">Każda grupa: arkusz, potem klucz</option><option value="separate">Najpierw arkusze, potem klucze</option></select></label><p style="font-size:13px">Gemini automatycznie tworzy zdania z lukami. Możesz je poprawić w edytorze przed wydrukiem.</p>';
   paperKind?.parentElement?.after(options);
   const selectedGroups=new Set(['A']);
   const groupArea=$('wcPaperGroups');
@@ -1774,7 +1801,7 @@ async function wcGuessDefinitions(words){
         const points=wcEl('input');points.type='number';points.min=0;points.max=100;points.value=q.points;points.onchange=()=>{q.points=Math.max(0,Math.min(100,Number(points.value)||0));refresh();};
         wrap.append(wcEl('label','Punkty '),points);
         if(q.lines&&(q.type==='context'||q.type==='grammar')){
-          wrap.append(wcEl('p','Wpisz zdanie z luką (np. She ____ to school.), polską podpowiedź i prawidłową odpowiedź.'));
+          wrap.append(wcEl('p','Gemini przygotowało zdania i odpowiedzi. Możesz je poprawić przed wydrukiem.'));
           q.lines.forEach((line,j)=>{
             const p=wcEl('p','Zdanie '+(j+1));wrap.append(p);
             [['sentence','Zdanie angielskie z luką'],['hint','Polskie słowo w nawiasie'],['answer','Poprawna odpowiedź EN']].forEach(([key,placeholder])=>{
@@ -1798,15 +1825,35 @@ async function wcGuessDefinitions(words){
       if(!Number.isInteger(count)||count<1||count>50||count>pairs.length)throw Error('Liczba zadań musi wynosić 1–50 i nie może przekraczać liczby słówek.');
       if(!wcChosenTasks.size)throw Error('Wybierz przynajmniej jeden kafelek zadania.');
       const types=[...wcChosenTasks],direction=$('teacherTestDirection').value;
-      const byGroup=new Map();
+      const byGroup=new Map(),pickedPairsByGroup=new Map();
       wcTeacherGenerated=groups.map(group=>{
         if(!byGroup.has(group)){
           const sequence=wcTeacherShuffle(Array.from({length:count},(_,i)=>types[i%types.length]));
           const picked=wcTeacherShuffle(pairs).slice(0,count);
+          pickedPairsByGroup.set(group,picked);
           byGroup.set(group,picked.map((pair,i)=>createQuestion(sequence[i],pair,pairs,direction)));
         }
-        return {group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',gradeThresholds:wcGradeThresholds(),questions:byGroup.get(group).map(q=>JSON.parse(JSON.stringify(q)))};
+        return {group,kind:$('wcPaperKind').value,title:$('teacherTestTitle').value.trim()||'Test ze słówek',gradeThresholds:wcGradeThresholds(),questions:byGroup.get(group).map(q=>JSON.parse(JSON.stringify(q))),_sourcePairs:byGroup.get(group).map((q,i)=>pickedPairsByGroup.get(group)[i])};
       });
+      if(types.includes('context')||types.includes('grammar')){
+        $('teacherTestStatus').textContent='✨ Gemini tworzy zdania angielskie z lukami…';
+        const requests=[];
+        wcTeacherGenerated.forEach((test,ti)=>test.questions.forEach((q,qi)=>{
+          if(q.type!=='context'&&q.type!=='grammar')return;
+          const source=q.type==='context'?q.hint:q.hint;
+          // Każda pozycja zawiera angielskie słowo i polskie tłumaczenie z listy nauczyciela.
+          const pair=wcTeacherGenerated[ti]._sourcePairs?.[qi];
+          requests.push({id:ti+'-'+qi,type:q.type,word:pair?.[0]||q.hint,translation:pair?.[1]||q.hint});
+        }));
+        const generated=await wcGeminiSentences(requests);
+        wcTeacherGenerated.forEach((test,ti)=>test.questions.forEach((q,qi)=>{
+          if(q.type!=='context'&&q.type!=='grammar')return;
+          const found=generated.find(x=>x.id===ti+'-'+qi);
+          if(!found)throw Error('Brak zdań dla zadania '+(qi+1));
+          q.lines=found.lines;
+          q.points=3;
+        }));
+      }
       if(types.includes('guess')){
         $('teacherTestStatus').textContent='🧩 Gemini generuje definicje A1–A2…';
         const words=[...new Set(wcTeacherGenerated.flatMap(t=>t.questions.filter(q=>q.type==='guess').map(q=>q.answer)))];
@@ -1818,7 +1865,7 @@ async function wcGuessDefinitions(words){
         }));
       }
       renderPreview();$('teacherPrintTests').disabled=false;
-      $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Uzupełnij zdania i odpowiedzi w nowych zadaniach przed drukiem.';
+      $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Gemini wygenerowało zdania i definicje. Możesz je edytować przed drukiem.';
     }catch(e){wcTeacherGenerated=[];$('teacherPrintTests').disabled=true;$('teacherTestStatus').textContent='❌ '+e.message;}
     finally{generateButton.disabled=false;}
   };
