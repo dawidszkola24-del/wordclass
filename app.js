@@ -2185,13 +2185,14 @@ async function wcNotesFetch(){
   <p>Wklej zdania po angielsku. Dodawaj dowolną liczbę zdań, także wiele zdań dla jednego słówka (w granicach pojemności Supabase). Zapis w Supabase — dostępny z innych urządzeń. Nie używa AI.</p>
   <p><b>Format:</b> słówko - całe zdanie po angielsku. W zdaniu musi występować dokładnie to słówko albo znacznik <code>{word}</code> / <code>____</code>.</p>
   <textarea id="wcNotesPaste" rows="8" style="width:100%;box-sizing:border-box" placeholder="apple - I eat an apple every day.&#10;apple - She bought a red apple.&#10;towel - I need a clean towel after a shower."></textarea>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0"><button type="button" id="wcNotesSave">💾 Zapisz zdania</button><button type="button" id="wcNotesRefresh" class="secondary">🔄 Odśwież</button></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0"><button type="button" id="wcNotesSave">💾 Zapisz zdania</button><button type="button" id="wcNotesRefresh" class="secondary">🔄 Odśwież</button><button type="button" id="wcNotesDeleteAll" class="danger">🗑️ Usuń wszystkie zdania</button></div>
   <p id="wcNotesStatus" role="status" aria-live="polite"></p>
   <label>Szukaj słówka <input id="wcNotesSearch" placeholder="np. apple" autocomplete="off"></label>
   <div id="wcNotesList"></div>`;
   admin.append(section);
   $('wcNotesSave').onclick=wcNotesSave;
   $('wcNotesRefresh').onclick=wcNotesLoad;
+  $('wcNotesDeleteAll').onclick=wcNotesDeleteAll;
   $('wcNotesSearch').oninput=wcNotesRender;
 })();
 let wcNotesCache=[];
@@ -2229,6 +2230,33 @@ function wcNotesRender(){
     };
     row.append(label,edit,del);list.append(row);
   });
+}
+async function wcNotesDeleteAll(){
+  const button=$('wcNotesDeleteAll'),status=$('wcNotesStatus');
+  if(!button||button.disabled)return;
+  button.disabled=true;
+  try{
+    // Pobierz aktualne rekordy z bazy, nie tylko przefiltrowane wyniki wyszukiwania.
+    const notes=await wcNotesFetch();
+    if(!notes.length){status.textContent='Notes zdań jest już pusty.';return;}
+    if(!confirm('Czy na pewno chcesz usunąć wszystkie '+notes.length+' zdań z Notesu zdań? Tej operacji nie można cofnąć. Słówka i tłumaczenia pozostaną bez zmian.'))return;
+    let removed=0;
+    for(let i=0;i<notes.length;i+=100){
+      const ids=notes.slice(i,i+100).map(n=>n.id);
+      const {error}=await db.from('wordclass_sentence_notes').delete().in('id',ids);
+      if(error)throw Error('Usunięto '+removed+' zdań, ale wystąpił błąd: '+error.message);
+      removed+=ids.length;
+      status.textContent='Usuwanie zdań: '+removed+' / '+notes.length+'…';
+    }
+    $('wcNotesPaste').value='';
+    $('wcNotesSearch').value='';
+    await wcNotesLoad();
+    status.textContent='✅ Usunięto '+removed+' zdań. Słówka i tłumaczenia pozostały bez zmian.';
+  }catch(e){
+    status.textContent='❌ '+e.message;
+    await wcNotesLoad();
+    status.textContent+=' Sprawdź pozostałe zdania i spróbuj ponownie.';
+  }finally{button.disabled=false;}
 }
 function wcNotesValidSentence(word,sentence){
   if(!sentence||sentence.length>500)return false;
