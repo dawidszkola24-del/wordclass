@@ -460,6 +460,11 @@ function buildAdminDashboard() {
   approvals.onclick = () => { openAdminSection('adminGrades'); wcLoadStudents(); }; 
   dashboard.append(approvals);
 
+  const notesTile = document.createElement('button');
+  notesTile.type='button';notesTile.className='dashboard-tile';
+  notesTile.innerHTML='<span class="tile-icon">📒</span><strong>Notes 1000 zdań</strong><small>Do 10 zdań na słówko — bez AI</small><span class="tile-arrow">Otwórz →</span>';
+  notesTile.onclick=()=>{openAdminSection('adminSentenceNotes');wcNotesLoad();};
+  dashboard.append(notesTile);
   const testTile = document.createElement('button');
   testTile.type = 'button';
   testTile.className = 'dashboard-tile';
@@ -477,7 +482,8 @@ function showAdminDashboard() {
     'adminAccounts',
     'adminResets',
     'adminGrades',
-    'adminTestGenerator'
+    'adminTestGenerator',
+    'adminSentenceNotes'
   ].forEach(id => {
     if ($(id)) $(id).classList.add('hidden');
   });
@@ -494,7 +500,8 @@ function openAdminSection(id) {
     'adminAccounts',
     'adminResets',
     'adminGrades',
-    'adminTestGenerator'
+    'adminTestGenerator',
+    'adminSentenceNotes'
   ].forEach(name => {
     if ($(name)) {
       $(name).classList.toggle('hidden', name !== id);
@@ -1687,7 +1694,7 @@ async function wcGeminiSentences(items){
   const extraTypes=[
     {id:'context',name:'Polskie słowo → luka EN',icon:'🟡',color:'#936100',bg:'#fff5c9',desc:'Zdanie angielskie i polska podpowiedź'},
     {id:'grammar',name:'Forma gramatyczna',icon:'🔴',color:'#a52b42',bg:'#ffe5e9',desc:'Uzupełnij poprawną formę słowa'},
-    {id:'guess',name:'Guess the Word ✨ Gemini',icon:'🧩',color:'#176d8a',bg:'#dff6ff',desc:'Definicje A1–A2 tworzone automatycznie przez Gemini (darmowy limit)'}
+    {id:'guess',name:'Zgadnij słówko 📒',icon:'🧩',color:'#176d8a',bg:'#dff6ff',desc:'Losowe zdanie z notesu — bez AI i opłat'}
   ];
   const taskGrid=Array.from($('wcTaskTiles')?.children || []).find(el => el.tagName === 'DIV' && el.style.display === 'grid');
   if(taskGrid){
@@ -1702,7 +1709,7 @@ async function wcGeminiSentences(items){
   }
   wcDefaultInstructions.context='Wpisz angielskie słowo z polskiej podpowiedzi w poprawnej formie.';
   wcDefaultInstructions.grammar='Wpisz poprawną formę gramatyczną słowa z nawiasu.';
-  wcDefaultInstructions.guess='Read the definition and guess the word.';
+  wcDefaultInstructions.guess='Przeczytaj zdanie i odgadnij brakujące słowo.';
   const paperKind=$('wcPaperKind');
   const options=wcEl('section');options.id='wcIndividualOptions';options.style.cssText='margin:16px 0;padding:18px;border:1px solid #ddd;border-radius:14px;background:#f8f9ff';
   options.innerHTML='<h3>🖨️ Wybierz grupy do druku / PDF</h3><p>Nie wybierasz uczniów. Zaznacz tylko grupy, które chcesz wygenerować.</p><div id="wcPaperGroups" style="display:flex;flex-wrap:wrap;gap:12px;margin:16px 0"></div><label>Drukowanie <select id="wcPaperPrintMode"><option value="paired">Każda grupa: arkusz, potem klucz</option><option value="separate">Najpierw arkusze, potem klucze</option></select></label><p style="font-size:13px">Gemini automatycznie tworzy zdania z lukami. Możesz je poprawić w edytorze przed wydrukiem.</p>';
@@ -1737,7 +1744,7 @@ async function wcGeminiSentences(items){
   function taskContent(q){
     const box=wcEl('div');
     if(q.type==='guess'){
-      box.append(wcEl('p','Definition: '+(q.question||'[Definition unavailable]')));
+      box.append(wcEl('p',q.question||'[Brak zdania w notesie]'));
       const blanks=wcEl('div');blanks.style.cssText='display:flex;flex-wrap:wrap;gap:5px;margin:12px 0';
       Array.from(q.answer).forEach(ch=>{const cell=wcEl('span',ch===' '?' ': '');cell.style.cssText=ch===' '?'width:12px':'width:25px;height:30px;border:1.5px solid #64748b;border-radius:4px;display:inline-block;text-align:center';blanks.append(cell);});
       box.append(blanks);
@@ -1795,7 +1802,7 @@ async function wcGeminiSentences(items){
         if(q.type==='guess'){
           const definition=wcEl('textarea');definition.rows=2;definition.value=q.question;
           definition.style.width='100%';definition.oninput=()=>{q.question=definition.value;refresh();};
-          wrap.append(wcEl('label','Definicja po angielsku (możesz poprawić)'),definition);
+          wrap.append(wcEl('label','Zdanie z luką (możesz poprawić)'),definition);
         }
 
         const points=wcEl('input');points.type='number';points.min=0;points.max=100;points.value=q.points;points.onchange=()=>{q.points=Math.max(0,Math.min(100,Number(points.value)||0));refresh();};
@@ -1855,17 +1862,21 @@ async function wcGeminiSentences(items){
         }));
       }
       if(types.includes('guess')){
-        $('teacherTestStatus').textContent='🧩 Gemini generuje definicje A1–A2…';
-        const words=[...new Set(wcTeacherGenerated.flatMap(t=>t.questions.filter(q=>q.type==='guess').map(q=>q.answer)))];
-        const definitions=await wcGuessDefinitions(words);
+        $('teacherTestStatus').textContent='📒 Losuję zdania z notesu…';
+        const notes=await wcNotesFetch();
+        const byWord=new Map();
+        notes.forEach(n=>{const key=wcNotesKey(n.word);if(!byWord.has(key))byWord.set(key,[]);byWord.get(key).push(n.sentence);});
+        const missing=new Set();
         wcTeacherGenerated.forEach(t=>t.questions.filter(q=>q.type==='guess').forEach(q=>{
-          const found=definitions[q.answer.toLowerCase()];
-          if(!found)throw Error('Brak definicji dla: '+q.answer);
-          q.question=found;
+          const options=byWord.get(wcNotesKey(q.answer))||[];
+          if(!options.length){missing.add(q.answer);return;}
+          const sentence=options[Math.floor(Math.random()*options.length)];
+          q.question=wcNotesCloze(sentence,q.answer);
         }));
+        if(missing.size)throw Error('Brak zdań w Notesie 1000 zdań dla: '+[...missing].join(', ')+'. Dodaj je w notesie albo odznacz kafelek Zgadnij słówko.');
       }
       renderPreview();$('teacherPrintTests').disabled=false;
-      $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Gemini wygenerowało zdania i definicje. Możesz je edytować przed drukiem.';
+      $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Zdania z notesu są losowane bez AI. Możesz je edytować przed drukiem.';
     }catch(e){wcTeacherGenerated=[];$('teacherPrintTests').disabled=true;$('teacherTestStatus').textContent='❌ '+e.message;}
     finally{generateButton.disabled=false;}
   };
@@ -2119,4 +2130,118 @@ async function wcOnlineClearEnded() {
     notice('Usunięto '+count+' zakończonych testów. Oceny pozostały.');
     await wcOnlineAdminList();
   } catch(e) {notice('Przerwano usuwanie: '+e.message);await wcOnlineAdminList();}
+}
+
+
+// ===== NOTES 1000 ZDAŃ — przechowywanie w Supabase, bez Gemini =====
+const wcNotesKey = word => String(word||'').trim().toLocaleLowerCase('en');
+const wcNotesWordPattern = /[A-Za-z]+(?:[ '-][A-Za-z]+)*/;
+function wcNotesCloze(sentence,word){
+  const clean=String(sentence||'').trim();
+  const target=String(word||'').trim();
+  if(!target)return clean;
+  // Autor może użyć {word} lub ____ jako znacznika luki.
+  if(/\{word\}/i.test(clean))return clean.replace(/\{word\}/gi,'_ '.repeat(target.replace(/\s/g,'').length).trim());
+  if(/_{3,}/.test(clean))return clean.replace(/_{3,}/g,'_ '.repeat(target.replace(/\s/g,'').length).trim());
+  const escaped=target.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const re=new RegExp('(^|[^A-Za-z])('+escaped+')(?=$|[^A-Za-z])','i');
+  return clean.replace(re,(_,prefix)=>prefix+'_ '.repeat(target.replace(/\s/g,'').length).trim());
+}
+async function wcNotesFetch(){
+  if(!user?.admin)throw Error('Zaloguj się jako administrator.');
+  const {data,error}=await db.from('wordclass_sentence_notes').select('id,word,sentence').order('id',{ascending:true}).limit(1001);
+  if(error)throw Error('Notes wymaga utworzenia tabeli w Supabase (plik SQL z ZIP). '+error.message);
+  return data||[];
+}
+(function wcNotesSetup(){
+  const admin=$('admin');if(!admin||$('adminSentenceNotes'))return;
+  const section=wcEl('section');section.id='adminSentenceNotes';section.className='dashboard-section hidden';
+  section.innerHTML=`<h3>📒 Notes 1000 zdań</h3>
+  <p>Wklej zdania po angielsku. Maksymalnie <b>1000 zdań</b> łącznie i <b>10 zdań na jedno słówko</b>. Zapis w Supabase — dostępny z innych urządzeń. Nie używa AI.</p>
+  <p><b>Format:</b> słówko - całe zdanie po angielsku. W zdaniu musi występować dokładnie to słówko albo znacznik <code>{word}</code> / <code>____</code>.</p>
+  <textarea id="wcNotesPaste" rows="8" style="width:100%;box-sizing:border-box" placeholder="apple - I eat an apple every day.&#10;apple - She bought a red apple.&#10;towel - I need a clean towel after a shower."></textarea>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0"><button type="button" id="wcNotesSave">💾 Zapisz zdania</button><button type="button" id="wcNotesRefresh" class="secondary">🔄 Odśwież</button></div>
+  <p id="wcNotesStatus" role="status" aria-live="polite"></p>
+  <label>Szukaj słówka <input id="wcNotesSearch" placeholder="np. apple" autocomplete="off"></label>
+  <div id="wcNotesList"></div>`;
+  admin.append(section);
+  $('wcNotesSave').onclick=wcNotesSave;
+  $('wcNotesRefresh').onclick=wcNotesLoad;
+  $('wcNotesSearch').oninput=wcNotesRender;
+})();
+let wcNotesCache=[];
+async function wcNotesLoad(){
+  const status=$('wcNotesStatus');if(!status)return;
+  status.textContent='Ładuję notes…';
+  try{wcNotesCache=await wcNotesFetch();wcNotesRender();status.textContent='📚 Zapisano '+wcNotesCache.length+' / 1000 zdań.';}
+  catch(e){status.textContent='❌ '+e.message;}
+}
+function wcNotesRender(){
+  const list=$('wcNotesList');if(!list)return;
+  list.replaceChildren();
+  const search=wcNotesKey($('wcNotesSearch')?.value);
+  const filtered=wcNotesCache.filter(n=>wcNotesKey(n.word).includes(search));
+  list.append(wcEl('p','Wyświetlono '+filtered.length+' z '+wcNotesCache.length+' zdań.'));
+  filtered.forEach(n=>{
+    const row=wcEl('div');row.style.cssText='padding:10px 0;border-bottom:1px solid #dce0ed;display:flex;gap:10px;align-items:center;flex-wrap:wrap';
+    const label=wcEl('span',n.word+' — '+n.sentence);label.style.cssText='flex:1;min-width:190px;overflow-wrap:anywhere';
+    const edit=wcEl('button','✏️ Edytuj');edit.className='secondary';edit.type='button';
+    edit.onclick=async()=>{
+      const value=prompt('Zmień zdanie dla słowa '+n.word+':',n.sentence);
+      if(value===null)return;
+      const sentence=value.trim();
+      if(!wcNotesValidSentence(n.word,sentence))return notice('Zdanie musi zawierać słówko, {word} albo ____.');
+      const {error}=await db.from('wordclass_sentence_notes').update({sentence}).eq('id',n.id);
+      if(error)return notice('Nie zapisano: '+error.message);
+      await wcNotesLoad();
+    };
+    const del=wcEl('button','🗑️ Usuń');del.className='danger';del.type='button';
+    del.onclick=async()=>{
+      if(!confirm('Usunąć to zdanie?'))return;
+      const {error}=await db.from('wordclass_sentence_notes').delete().eq('id',n.id);
+      if(error)return notice('Nie usunięto: '+error.message);
+      await wcNotesLoad();
+    };
+    row.append(label,edit,del);list.append(row);
+  });
+}
+function wcNotesValidSentence(word,sentence){
+  if(!sentence||sentence.length>500)return false;
+  if(/\{word\}|_{3,}/i.test(sentence))return true;
+  const escaped=word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return new RegExp('(^|[^A-Za-z])'+escaped+'(?=$|[^A-Za-z])','i').test(sentence);
+}
+async function wcNotesSave(){
+  const status=$('wcNotesStatus'),button=$('wcNotesSave');
+  button.disabled=true;
+  try{
+    const lines=$('wcNotesPaste').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    if(!lines.length)throw Error('Wklej przynajmniej jedno zdanie.');
+    const existing=await wcNotesFetch();
+    const entries=[],counts=new Map();
+    const duplicates=new Set(existing.map(n=>wcNotesKey(n.word)+'\u0000'+n.sentence.toLocaleLowerCase('en')));
+    existing.forEach(n=>counts.set(wcNotesKey(n.word),(counts.get(wcNotesKey(n.word))||0)+1));
+    for(let i=0;i<lines.length;i++){
+      const match=lines[i].match(/^(.+?)\s+-\s+(.+)$/);
+      if(!match)throw Error('Linia '+(i+1)+': użyj formatu słówko - zdanie.');
+      const word=match[1].trim(),sentence=match[2].trim(),key=wcNotesKey(word);
+      if(word.length>80||!wcNotesWordPattern.test(word)||!wcNotesValidSentence(word,sentence))throw Error('Linia '+(i+1)+': zdanie musi zawierać słówko, {word} albo ____.');
+      const unique=key+'\u0000'+sentence.toLocaleLowerCase('en');
+      if(duplicates.has(unique))continue;
+      duplicates.add(unique);
+      const count=(counts.get(key)||0)+1;
+      if(count>10)throw Error('Za dużo zdań dla słowa '+word+' (maks. 10).');
+      counts.set(key,count);entries.push({word,sentence});
+    }
+    if(existing.length+entries.length>1000)throw Error('Przekroczono limit 1000 zdań.');
+    if(!entries.length)throw Error('Wszystkie wklejone zdania już są w notesie.');
+    for(let i=0;i<entries.length;i+=100){
+      const {error}=await db.from('wordclass_sentence_notes').insert(entries.slice(i,i+100));
+      if(error)throw Error('Nie zapisano wszystkich zdań: '+error.message);
+    }
+    $('wcNotesPaste').value='';
+    await wcNotesLoad();
+    status.textContent='✅ Dodano '+entries.length+' zdań. Razem: '+wcNotesCache.length+' / 1000.';
+  }catch(e){status.textContent='❌ '+e.message;}
+  finally{button.disabled=false;}
 }
