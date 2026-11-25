@@ -1314,7 +1314,7 @@ $('teacherPrintTests').onclick=()=>{
   const popup=window.open('','_blank');if(!popup)return notice('Zezwól na wyskakujące okna.');
   const doc=popup.document;doc.title='WordClass — arkusze A–G';
   const style=doc.createElement('style');
-  style.textContent='@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;color:#202537;font-size:12px}section.wc-paper-sheet{break-after:page;page-break-after:always}section.wc-paper-sheet:last-of-type{break-after:page}h2{font-size:18px}p{margin:12px 0}button{padding:12px 20px;background:#5645c7;color:white;border:0;border-radius:8px;margin-bottom:18px}.wc-paper-task{break-inside:avoid;page-break-inside:avoid}@media print{button{display:none}}';
+  style.textContent='@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;color:#202537;font-size:12px}section.wc-paper-sheet{break-after:page;page-break-after:always}section.wc-paper-sheet:last-of-type{break-after:page}h2{font-size:18px}p{margin:12px 0}button{padding:12px 20px;background:#5645c7;color:white;border:0;border-radius:8px;margin-bottom:18px}.wc-paper-task{break-inside:avoid;page-break-inside:avoid}@media print{button,.wc-guess-actions{display:none!important}.wc-print-task input[aria-label^="Litera "]{border:2px solid #111!important;appearance:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}}';
   doc.head.append(style);
   const button=wcEl('button','🖨️ Drukuj / zapisz jako PDF');button.onclick=()=>popup.print();doc.body.append(button);
   wcTeacherGenerated.forEach(test=>doc.body.append(wcPaperSheet(test,true)));
@@ -1666,6 +1666,13 @@ async function wcGuessDefinitions(words){
 }
 
 // Gemini: automatyczne zdania z lukami (ten sam bezpieczny endpoint Supabase).
+async function wcRetryFetch(url,options){
+  for(let attempt=0;attempt<3;attempt++){
+    const response=await fetch(url,options);
+    if(![429,502,503,504].includes(response.status)||attempt===2)return response;
+    await new Promise(resolve=>setTimeout(resolve,1000*2**attempt));
+  }
+}
 async function wcGeminiSentences(items){
   const {data,error}=await db.auth.getSession();
   const token=data?.session?.access_token;
@@ -1673,7 +1680,7 @@ async function wcGeminiSentences(items){
   const all=[];
   for(let start=0;start<items.length;start+=12){
     const batch=items.slice(start,start+12);
-    const response=await fetch('https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/wordclass-ai-definitions',{
+    const response=await wcRetryFetch('https://mqjnjzuhrmspcspkvjvl.supabase.co/functions/v1/wordclass-ai-definitions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':'sb_publishable_lT_I31LEre8X0h3H5hAWtw_54mud94_'},
       body:JSON.stringify({mode:'sentences',items:batch})
@@ -1852,11 +1859,19 @@ async function wcGeminiSentences(items){
       if(!Number.isInteger(count)||count<1||count>50||count>pairs.length)throw Error('Liczba zadań musi wynosić 1–50 i nie może przekraczać liczby słówek.');
       if(!wcChosenTasks.size)throw Error('Wybierz przynajmniej jeden kafelek zadania.');
       const types=[...wcChosenTasks],direction=$('teacherTestDirection').value;
+      const byWord=new Map();
+      if(types.includes('guess')){
+        const notes=await wcNotesFetch();
+        notes.forEach(n=>{if(!wcNotesValidSentence(n.word,n.sentence))return;const key=wcNotesKey(n.word);if(!byWord.has(key))byWord.set(key,[]);byWord.get(key).push(n.sentence);});
+        if(pairs.filter(p=>byWord.has(wcNotesKey(p[0]))).length<wcSequence().filter(t=>t==='guess').length)throw Error('Za mało słówek ze zdaniami w notesie.');
+      }
       const byGroup=new Map(),pickedPairsByGroup=new Map();
       const generatedTests=groups.map(group=>{
         if(!byGroup.has(group)){
           const sequence=wcTeacherShuffle(wcSequence());
-          const picked=wcTeacherShuffle(pairs).slice(0,count);
+          const pool=wcTeacherShuffle(pairs),picked=Array(count);
+          sequence.forEach((type,i)=>{if(type==='guess'){const j=pool.findIndex(p=>byWord.has(wcNotesKey(p[0])));picked[i]=pool.splice(j,1)[0];}});
+          sequence.forEach((type,i)=>{if(!picked[i])picked[i]=pool.shift();});
           pickedPairsByGroup.set(group,picked);
           byGroup.set(group,picked.map((pair,i)=>createQuestion(sequence[i],pair,pairs,direction)));
         }
@@ -1872,7 +1887,16 @@ async function wcGeminiSentences(items){
           const pair=generatedTests[ti]._sourcePairs?.[qi];
           requests.push({id:ti+'-'+qi,type:q.type,word:pair?.[0]||q.hint,translation:pair?.[1]||q.hint});
         }));
-        const generated=await wcGeminiSentences(requests);
+        let generated;
+        try{generated=await wcGeminiSentences(requests);}catch(e){
+          // Keep the requested task count; use local translation tasks instead of inventing grammar answers.
+          generatedTests.forEach(test=>{test.questions=test.questions.map((q,i)=>{
+            if(q.type!=='context'&&q.type!=='grammar')return q;
+            return createQuestion('open',test._sourcePairs[i],pairs,'plen');
+          });});
+          generatedTests.warning='Gemini niedostępne: zadania kontekstowe i gramatyczne zastąpiono tłumaczeniem PL → EN. '+e.message;
+        }
+        if(generated)
         generatedTests.forEach((test,ti)=>test.questions.forEach((q,qi)=>{
           if(q.type!=='context'&&q.type!=='grammar')return;
           const found=generated.find(x=>x.id===ti+'-'+qi);
@@ -1883,9 +1907,6 @@ async function wcGeminiSentences(items){
       }
       if(types.includes('guess')){
         $('teacherTestStatus').textContent='📒 Losuję zdania z notesu…';
-        const notes=await wcNotesFetch();
-        const byWord=new Map();
-        notes.forEach(n=>{const key=wcNotesKey(n.word);if(!byWord.has(key))byWord.set(key,[]);byWord.get(key).push(n.sentence);});
         const missing=new Set();
         generatedTests.forEach(t=>t.questions.filter(q=>q.type==='guess').forEach(q=>{
           const options=byWord.get(wcNotesKey(q.answer))||[];
@@ -1902,7 +1923,7 @@ async function wcGeminiSentences(items){
     const generateButton=$('teacherMakeTests');generateButton.disabled=true;
     try{const groups=[...selectedGroups].sort();wcTeacherGenerated=await wcGenerateGroups(groups);
       renderPreview();$('teacherPrintTests').disabled=false;
-      $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Zdania z notesu są losowane bez AI. Możesz je edytować przed drukiem.';
+      $('teacherTestStatus').textContent='✅ Przygotowano grupy: '+groups.join(', ')+'. Zdania z notesu są losowane bez AI. Możesz je edytować przed drukiem.'+(wcTeacherGenerated.warning?' ⚠️ '+wcTeacherGenerated.warning:'');
     }catch(e){wcTeacherGenerated=[];$('teacherPrintTests').disabled=true;$('teacherTestStatus').textContent='❌ '+e.message;}
     finally{generateButton.disabled=false;}
   };
@@ -1912,7 +1933,7 @@ async function wcGeminiSentences(items){
     if(unfinished)return notice('Najpierw uzupełnij wszystkie zdania, podpowiedzi i prawidłowe odpowiedzi w zadaniach kontekstowych i gramatycznych.');
     const popup=window.open('','_blank');if(!popup)return notice('Zezwól na wyskakujące okna.');
     const doc=popup.document;doc.title='WordClass — wybrane grupy';
-    const style=doc.createElement('style');style.textContent='@page{size:A4;margin:13mm}body{font-family:Arial,sans-serif;color:#202537;font-size:12px}h2{font-size:17px;margin:0 0 10px}p{line-height:1.45}.wc-individual-sheet{break-after:page;page-break-after:always}.wc-individual-sheet:last-child{break-after:auto;page-break-after:auto}.wc-print-task{margin:14px 0 18px;break-inside:avoid;page-break-inside:avoid}button{padding:10px;background:#5545c7;color:white;border:0;border-radius:6px;margin-bottom:15px}@media print{button{display:none}}';doc.head.append(style);
+    const style=doc.createElement('style');style.textContent='@page{size:A4;margin:13mm}body{font-family:Arial,sans-serif;color:#202537;font-size:12px}h2{font-size:17px;margin:0 0 10px}p{line-height:1.45}.wc-individual-sheet{break-after:page;page-break-after:always}.wc-individual-sheet:last-child{break-after:auto;page-break-after:auto}.wc-print-task{margin:14px 0 18px;break-inside:avoid;page-break-inside:avoid}button{padding:10px;background:#5545c7;color:white;border:0;border-radius:6px;margin-bottom:15px}@media print{button,.wc-guess-actions{display:none!important}.wc-print-task input[aria-label^="Litera "]{border:2px solid #111!important;appearance:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}}';doc.head.append(style);
     const btn=wcEl('button','🖨️ Drukuj / zapisz PDF');btn.onclick=()=>popup.print();doc.body.append(btn);
     const mode=$('wcPaperPrintMode').value;
     if(mode==='paired')wcTeacherGenerated.forEach(t=>{doc.body.append(sheet(t,false),sheet(t,true));});
@@ -2033,6 +2054,7 @@ async function wcOnlinePublish() {
     if(!chosen.length)throw Error('Zaznacz przynajmniej jednego ucznia.');
     const grades=wcGradeThresholds();
     const tests=await wcGenerateGroups([... 'ABCDEFG']);
+    if(tests.warning&&!confirm(tests.warning+' Czy opublikować taki test?'))return;
     const questions=Object.fromEntries(tests.map(t=>[t.group,t.questions.map(wcOnlinePack)]));
     const id=await wcOnlineRpc('wc_online_create_counted',{
       p_title:$('teacherTestTitle').value.trim()||'Test ze słówek',
@@ -2189,13 +2211,18 @@ async function wcNotesFetch(){
   <p>Wklej zdania po angielsku. Dodawaj dowolną liczbę zdań, także wiele zdań dla jednego słówka (w granicach pojemności Supabase). Zapis w Supabase — dostępny z innych urządzeń. Nie używa AI.</p>
   <p><b>Format:</b> słówko - całe zdanie po angielsku. W zdaniu musi występować dokładnie to słówko albo znacznik <code>{word}</code> / <code>____</code>.</p>
   <textarea id="wcNotesPaste" rows="8" style="width:100%;box-sizing:border-box" placeholder="apple - I eat an apple every day.&#10;apple - She bought a red apple.&#10;towel - I need a clean towel after a shower."></textarea>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0"><button type="button" id="wcNotesSave">💾 Zapisz zdania</button><button type="button" id="wcNotesRefresh" class="secondary">🔄 Odśwież</button></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0"><button type="button" id="wcNotesSave">💾 Zapisz zdania</button><button type="button" id="wcNotesRefresh" class="secondary">🔄 Odśwież</button><button type="button" id="wcNotesDeleteAll" class="danger">🗑️ Usuń wszystkie zdania</button></div>
   <p id="wcNotesStatus" role="status" aria-live="polite"></p>
   <label>Szukaj słówka <input id="wcNotesSearch" placeholder="np. apple" autocomplete="off"></label>
   <div id="wcNotesList"></div>`;
   admin.append(section);
   $('wcNotesSave').onclick=wcNotesSave;
   $('wcNotesRefresh').onclick=wcNotesLoad;
+  $('wcNotesDeleteAll').onclick=async()=>{
+    if(!user?.admin||!confirm('Usunąć wszystkie zdania? Słówka pozostaną.'))return;
+    const button=$('wcNotesDeleteAll');button.disabled=true;
+    try{const rows=await wcNotesFetch();for(let i=0;i<rows.length;i+=100){const {error}=await db.from('wordclass_sentence_notes').delete().in('id',rows.slice(i,i+100).map(r=>r.id));if(error)throw error;} $('wcNotesPaste').value='';await wcNotesLoad();}catch(e){$('wcNotesStatus').textContent='❌ '+e.message;}finally{button.disabled=false;}
+  };
   $('wcNotesSearch').oninput=wcNotesRender;
 })();
 let wcNotesCache=[];
@@ -2298,14 +2325,21 @@ function wcOnlinePack(q){
  return out;
 }
 function wcOnlineRenderCounted(q,i,area){
- const box=wcEl('div');box.style.cssText='padding:12px;margin:10px 0;border:1px solid #ddd;border-radius:10px';box.append(wcEl('strong',(i+1)+'. '+(q.instruction||q.question)));if(q.instruction&&q.question)box.append(wcEl('p',q.question));
+ const box=wcEl('div');box.style.cssText='padding:12px;margin:10px 0;border:1px solid #ddd;border-radius:10px';box.append(wcEl('strong',(i+1)+'. '+(q.instruction||q.question)));if(q.type!=='guess'&&q.instruction&&q.question)box.append(wcEl('p',q.question));
  let values=[];try{values=JSON.parse(q.answer||'[]');if(!Array.isArray(values))values=[];}catch(e){}
  const composite=!!(q.left||q.lines);const inputs=[];
  function save(){wcOnlineAnswers[String(i)]=composite?JSON.stringify(inputs.map(x=>wcNorm(x.value))):q.type==='guess'?inputs.map(x=>x.value).join(''):inputs[0].value;wcOnlineQueueSave();}
  function field(label,choices,value){const l=wcEl('label',label);const input=wcEl(choices?'select':'input');if(choices){const blank=wcEl('option','Wybierz');blank.value='';input.append(blank);choices.forEach(([v,t])=>{const o=wcEl('option',t);o.value=v;input.append(o);});}input.value=value||'';input.oninput=save;inputs.push(input);l.append(input);box.append(l);return input;}
  if(q.left){box.append(wcEl('p',q.right.map((v,j)=>String.fromCharCode(65+j)+') '+v).join(' | ')));q.left.forEach((v,j)=>field(v,q.right.map((x,k)=>[String(k+1),String.fromCharCode(65+k)]),values[j]));}
  else if(q.lines)q.lines.forEach((l,j)=>field(l.sentence+(l.hint?' ('+l.hint+')':''),q.type==='truefalse'?[['prawda','Prawda'],['fałsz','Fałsz']]:null,values[j]));
- else if(q.type==='guess'){for(let j=0;j<q.length;j++){const x=field('',null,Array.from(q.answer||'')[j]);x.maxLength=1;x.style.cssText='width:32px;text-align:center';x.parentElement.style.display='inline-block';x.setAttribute('aria-label','Litera '+(j+1));}}
+ else if(q.type==='guess'){
+   const sentence=String(q.question||'');const blank=/(?:_\s*){2,}/.exec(sentence);
+   const line=wcEl('div');line.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:10px 0';box.append(line);
+   line.append(wcEl('span',blank?sentence.slice(0,blank.index):sentence));
+   const cells=wcEl('span');cells.style.cssText='display:inline-flex;flex-wrap:wrap;gap:4px';line.append(cells);
+   for(let j=0;j<q.length;j++){const x=field('',null,Array.from(q.answer||'')[j]);x.maxLength=1;x.style.cssText='width:32px;height:36px;box-sizing:border-box;border:2px solid #334155;border-radius:3px;text-align:center;padding:0;font-size:20px';cells.append(x.parentElement);x.setAttribute('aria-label','Litera '+(j+1));x.oninput=()=>{x.value=x.value.slice(-1).toUpperCase();save();if(x.value)inputs[j+1]?.focus();};x.onkeydown=e=>{if(e.key==='Backspace'&&!x.value)inputs[j-1]?.focus();};}
+   if(blank)line.append(wcEl('span',sentence.slice(blank.index+blank[0].length)));
+ }
  else field('',q.choices?.map(x=>[x,x]),q.answer);
  wcOnlineAnswers[String(i)]=q.answer||'';area.append(box);
 }
